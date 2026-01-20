@@ -27,13 +27,17 @@ const directional = new THREE.DirectionalLight(0xffffff, 0.8)
 directional.position.set(2, 3, 4)
 scene.add(ambient, directional)
 
+const letterFillAlpha = 0.95
+const letterColor = `rgba(255,255,255,${letterFillAlpha})`
+const gridColor = `rgba(255,255,255,${letterFillAlpha})`
+
 const baseMaterialParams = {
     color: 0xffffff,
     roughness: 0.6,
     metalness: 0.1
 }
 
-const planeSize = 20
+const planeSize = 25
 const depressionRadius = 2.5
 const depressionDepth = 18.4
 const depressionFalloff = 9
@@ -65,7 +69,6 @@ function createDepressedPlane(): THREE.Mesh {
     const material = new THREE.MeshStandardMaterial({
         ...baseMaterialParams,
         transparent: true,
-        alphaMap: createRadialMaskTexture(),
         side: THREE.DoubleSide
     })
 
@@ -97,7 +100,7 @@ const fadeEnd = 0.3
 const clock = new THREE.Clock()
 const letterCells: LetterCell[] = []
 let flowOffset = 0
-const gridFlowSpeed = 0.2
+const gridFlowSpeed = 0.1
 
 function wrapRadius(radius: number, offset: number): number {
     let shifted = radius - offset
@@ -122,11 +125,12 @@ letterTexture.needsUpdate = true
 
 const letterOverlay = new THREE.Mesh(
     plane.geometry.clone(),
-    new THREE.MeshBasicMaterial({
+    new THREE.MeshStandardMaterial({
         map: letterTexture,
         transparent: true,
         opacity: 1,
-        depthWrite: false
+        depthWrite: false,
+        ...baseMaterialParams
     })
 )
 letterOverlay.renderOrder = 1
@@ -149,36 +153,6 @@ function createLetterCells() {
 
 createLetterCells()
 
-function createRadialMaskTexture(): THREE.CanvasTexture {
-    const size = 512
-    const canvas = document.createElement('canvas')
-    canvas.width = size
-    canvas.height = size
-    const ctx = canvas.getContext('2d')
-    if (!ctx) {
-        throw new Error('Failed to get 2D context')
-    }
-
-    const center = size / 2
-    const radius = size / 2
-    const gradient = ctx.createRadialGradient(
-        center,
-        center,
-        radius * 0.75,
-        center,
-        center,
-        radius
-    )
-    gradient.addColorStop(0, 'rgba(255,255,255,1)')
-    gradient.addColorStop(1, 'rgba(255,255,255,0)')
-
-    ctx.fillStyle = gradient
-    ctx.fillRect(0, 0, size, size)
-
-    const texture = new THREE.CanvasTexture(canvas)
-    texture.needsUpdate = true
-    return texture
-}
 
 function createGridTexture(renderer: THREE.WebGLRenderer): THREE.CanvasTexture {
     const size = 1024
@@ -194,7 +168,7 @@ function createGridTexture(renderer: THREE.WebGLRenderer): THREE.CanvasTexture {
     }
 
     ctx.clearRect(0, 0, size, size)
-    ctx.strokeStyle = 'rgba(255,255,255,0.6)'
+    ctx.strokeStyle = gridColor
     ctx.lineWidth = 2
 
     for (let i = 0; i <= cells; i += 1) {
@@ -211,7 +185,7 @@ function createGridTexture(renderer: THREE.WebGLRenderer): THREE.CanvasTexture {
     }
 
     const letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'
-    ctx.fillStyle = 'white'
+    ctx.fillStyle = letterColor
     ctx.textAlign = 'center'
     ctx.textBaseline = 'middle'
     ctx.font = 'bold 48px monospace'
@@ -248,6 +222,7 @@ const sphereMaterial = sphere.material as THREE.MeshStandardMaterial
 planeMaterial.color.copy(sphereMaterial.color)
 planeMaterial.roughness = sphereMaterial.roughness
 planeMaterial.metalness = sphereMaterial.metalness
+planeMaterial.color.set(0x000000)
 
 function onResize() {
     camera.aspect = window.innerWidth / window.innerHeight
@@ -265,7 +240,7 @@ function animate() {
     flowOffset = (flowOffset + gridFlowSpeed * delta) % half
 
     letterCtx.clearRect(0, 0, letterCanvasSize, letterCanvasSize)
-    letterCtx.strokeStyle = 'rgba(255,255,255,0.12)'
+    letterCtx.strokeStyle = gridColor
     letterCtx.lineWidth = 2
 
     const center = letterCanvasSize / 2
@@ -317,7 +292,8 @@ function animate() {
         const py = (1 - v) * letterCanvasSize
 
         const angleScreen = Math.atan2(y, -x)
-        letterCtx.fillStyle = `rgba(255,255,255,${alpha})`
+        const scaledAlpha = letterFillAlpha * alpha
+        letterCtx.fillStyle = `rgba(255,255,255,${scaledAlpha})`
         letterCtx.font = `bold ${size}px monospace`
         letterCtx.save()
         letterCtx.translate(px, py)
