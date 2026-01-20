@@ -74,13 +74,41 @@ function createDepressedPlane(): THREE.Mesh {
 
     const plane = new THREE.Mesh(geometry, material)
     plane.position.set(0, 0, 0)
-    plane.rotation.x = -1
+    plane.rotation.x = -1.15
     plane.rotation.y = 0
     return plane
 }
 
 const plane = createDepressedPlane()
 scene.add(plane)
+
+let isDraggingPlane = false
+let lastPointerX = 0
+const planeRotationSpeed = 0.005
+
+renderer.domElement.addEventListener('pointerdown', (event) => {
+    isDraggingPlane = true
+    lastPointerX = event.clientX
+})
+
+window.addEventListener('pointermove', (event) => {
+    if (!isDraggingPlane) {
+        return
+    }
+    const deltaX = event.clientX - lastPointerX
+    lastPointerX = event.clientX
+    plane.rotation.x += deltaX * planeRotationSpeed
+
+    console.log(plane.rotation.x)
+})
+
+window.addEventListener('pointerup', () => {
+    isDraggingPlane = false
+})
+
+window.addEventListener('pointerleave', () => {
+    isDraggingPlane = false
+})
 
 type LetterCell = {
     ringIndex: number
@@ -89,8 +117,8 @@ type LetterCell = {
 }
 
 const letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'
-const radialCount = 18
-const angularCount = 32
+const radialCount = 48
+const angularCount = 48
 const half = planeSize / 2
 const ringStep = half / radialCount
 const angleStep = (Math.PI * 2) / angularCount
@@ -112,7 +140,7 @@ function wrapRadius(radius: number, offset: number): number {
 }
 
 const letterCanvas = document.createElement('canvas')
-const letterCanvasSize = 2048
+const letterCanvasSize = 4096
 letterCanvas.width = letterCanvasSize
 letterCanvas.height = letterCanvasSize
 const letterCtx = letterCanvas.getContext('2d')
@@ -121,6 +149,10 @@ if (!letterCtx) {
 }
 
 const letterTexture = new THREE.CanvasTexture(letterCanvas)
+letterTexture.anisotropy = Math.min(8, renderer.capabilities.getMaxAnisotropy())
+letterTexture.minFilter = THREE.LinearMipmapLinearFilter
+letterTexture.magFilter = THREE.LinearFilter
+letterTexture.generateMipmaps = true
 letterTexture.needsUpdate = true
 
 const letterOverlay = new THREE.Mesh(
@@ -129,6 +161,7 @@ const letterOverlay = new THREE.Mesh(
         map: letterTexture,
         transparent: true,
         opacity: 1,
+        alphaTest: 0.2,
         depthWrite: false,
         ...baseMaterialParams
     })
@@ -284,7 +317,7 @@ function animate() {
             Math.max(0, (radius - fadeEnd) / (fadeStart - fadeEnd))
         )
         const alpha = t
-        const size = 30 + 12 * t
+        const size = 24 + 10 * t
 
         const u = (x + half) / planeSize
         const v = (y + half) / planeSize
