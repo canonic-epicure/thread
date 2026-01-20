@@ -27,6 +27,12 @@ const directional = new THREE.DirectionalLight(0xffffff, 0.8)
 directional.position.set(2, 3, 4)
 scene.add(ambient, directional)
 
+const baseMaterialParams = {
+    color: 0xffffff,
+    roughness: 0.6,
+    metalness: 0.1
+}
+
 const planeSize = 20
 const depressionRadius = 2.5
 const depressionDepth = 18.4
@@ -57,9 +63,7 @@ function createDepressedPlane(): THREE.Mesh {
     geometry.computeVertexNormals()
 
     const material = new THREE.MeshStandardMaterial({
-        color: 0x565656,
-        roughness: 0.6,
-        metalness: 0.1,
+        ...baseMaterialParams,
         transparent: true,
         alphaMap: createRadialMaskTexture(),
         side: THREE.DoubleSide
@@ -76,21 +80,33 @@ const plane = createDepressedPlane()
 scene.add(plane)
 
 type LetterCell = {
-    x: number
-    y: number
-    speed: number
+    ringIndex: number
+    angleIndex: number
     glyph: string
 }
 
 const letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'
-const gridCount = 24
-const gridStep = planeSize / (gridCount - 1)
+const radialCount = 18
+const angularCount = 32
 const half = planeSize / 2
+const ringStep = half / radialCount
+const angleStep = (Math.PI * 2) / angularCount
 const sinkRadius = 0.8
 const fadeStart = 1.6
 const fadeEnd = 0.3
 const clock = new THREE.Clock()
 const letterCells: LetterCell[] = []
+let flowOffset = 0
+const gridFlowSpeed = 0.2
+
+function wrapRadius(radius: number, offset: number): number {
+    let shifted = radius - offset
+    shifted = ((shifted % half) + half) % half
+    if (shifted < 0.01) {
+        shifted += half
+    }
+    return shifted
+}
 
 const letterCanvas = document.createElement('canvas')
 const letterCanvasSize = 2048
@@ -116,27 +132,13 @@ const letterOverlay = new THREE.Mesh(
 letterOverlay.renderOrder = 1
 plane.add(letterOverlay)
 
-function spawnCellAtEdge(cell: LetterCell) {
-    const onVerticalEdge = Math.random() < 0.5
-    const edgeIndex = Math.floor(Math.random() * gridCount)
-    if (onVerticalEdge) {
-        cell.x = Math.random() < 0.5 ? -half : half
-        cell.y = -half + edgeIndex * gridStep
-    } else {
-        cell.x = -half + edgeIndex * gridStep
-        cell.y = Math.random() < 0.5 ? -half : half
-    }
-    cell.speed = 0.4 + Math.random() * 0.35
-}
-
 function createLetterCells() {
     let index = 0
-    for (let y = 0; y < gridCount; y += 1) {
-        for (let x = 0; x < gridCount; x += 1) {
+    for (let ring = 0; ring < radialCount; ring += 1) {
+        for (let angle = 0; angle < angularCount; angle += 1) {
             const cell: LetterCell = {
-                x: -half + x * gridStep,
-                y: -half + y * gridStep,
-                speed: 0.4 + Math.random() * 0.35,
+                ringIndex: ring,
+                angleIndex: angle,
                 glyph: letters[index % letters.length]
             }
             letterCells.push(cell)
@@ -236,11 +238,16 @@ const sphere = new THREE.Mesh(
     new THREE.SphereGeometry(1, 64, 64),
     new THREE.MeshStandardMaterial({
         map: texture,
-        roughness: 0.6,
-        metalness: 0.1
+        ...baseMaterialParams
     })
 )
 scene.add(sphere)
+
+const planeMaterial = plane.material as THREE.MeshStandardMaterial
+const sphereMaterial = sphere.material as THREE.MeshStandardMaterial
+planeMaterial.color.copy(sphereMaterial.color)
+planeMaterial.roughness = sphereMaterial.roughness
+planeMaterial.metalness = sphereMaterial.metalness
 
 function onResize() {
     camera.aspect = window.innerWidth / window.innerHeight
@@ -255,33 +262,31 @@ function animate() {
     sphere.rotation.y += 0.003
     sphere.rotation.x += 0.0015
 
-    for (const cell of letterCells) {
-        const dist = Math.hypot(cell.x, cell.y)
-        if (dist <= sinkRadius) {
-            spawnCellAtEdge(cell)
-            continue
-        }
-
-        const dirX = -cell.x / dist
-        const dirY = -cell.y / dist
-        cell.x += dirX * cell.speed * delta
-        cell.y += dirY * cell.speed * delta
-    }
+    flowOffset = (flowOffset + gridFlowSpeed * delta) % half
 
     letterCtx.clearRect(0, 0, letterCanvasSize, letterCanvasSize)
     letterCtx.strokeStyle = 'rgba(255,255,255,0.12)'
     letterCtx.lineWidth = 2
 
-    for (let i = 0; i < gridCount; i += 1) {
-        const p = (i / (gridCount - 1)) * letterCanvasSize
+    const center = letterCanvasSize / 2
+    for (let ring = 1; ring <= radialCount; ring += 1) {
+        const radius = wrapRadius(ring * ringStep, flowOffset)
+        if (radius <= sinkRadius) {
+            continue
+        }
+        const pr = (radius / half) * center
         letterCtx.beginPath()
-        letterCtx.moveTo(p, 0)
-        letterCtx.lineTo(p, letterCanvasSize)
+        letterCtx.arc(center, center, pr, 0, Math.PI * 2)
         letterCtx.stroke()
+    }
 
+    for (let angle = 0; angle < angularCount; angle += 1) {
+        const theta = angle * angleStep
+        const x = center + Math.cos(theta) * center
+        const y = center + Math.sin(theta) * center
         letterCtx.beginPath()
-        letterCtx.moveTo(0, p)
-        letterCtx.lineTo(letterCanvasSize, p)
+        letterCtx.moveTo(center, center)
+        letterCtx.lineTo(x, y)
         letterCtx.stroke()
     }
 
@@ -290,23 +295,35 @@ function animate() {
     letterCtx.font = 'bold 48px monospace'
 
     for (const cell of letterCells) {
-        const dist = Math.hypot(cell.x, cell.y)
-        if (dist <= sinkRadius) {
+        const radius = wrapRadius((cell.ringIndex + 0.5) * ringStep, flowOffset)
+        if (radius <= sinkRadius) {
             continue
         }
 
-        const t = Math.min(1, Math.max(0, (dist - fadeEnd) / (fadeStart - fadeEnd)))
-        const alpha = t
-        const size = 40 + 16 * t
+        const theta = (cell.angleIndex + 0.5) * angleStep
+        const x = radius * Math.cos(theta)
+        const y = radius * Math.sin(theta)
 
-        const u = (cell.x + half) / planeSize
-        const v = (cell.y + half) / planeSize
+        const t = Math.min(
+            1,
+            Math.max(0, (radius - fadeEnd) / (fadeStart - fadeEnd))
+        )
+        const alpha = t
+        const size = 30 + 12 * t
+
+        const u = (x + half) / planeSize
+        const v = (y + half) / planeSize
         const px = u * letterCanvasSize
         const py = (1 - v) * letterCanvasSize
 
+        const angleScreen = Math.atan2(y, -x)
         letterCtx.fillStyle = `rgba(255,255,255,${alpha})`
         letterCtx.font = `bold ${size}px monospace`
-        letterCtx.fillText(cell.glyph, px, py)
+        letterCtx.save()
+        letterCtx.translate(px, py)
+        letterCtx.rotate(angleScreen + Math.PI / 2)
+        letterCtx.fillText(cell.glyph, 0, 0)
+        letterCtx.restore()
     }
 
     letterTexture.needsUpdate = true
