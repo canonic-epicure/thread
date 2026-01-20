@@ -38,9 +38,9 @@ const baseMaterialParams = {
 }
 
 const planeSize = 25
-const depressionRadius = 2.5
+const depressionRadius = 3.1
 const depressionDepth = 18.4
-const depressionFalloff = 9
+const depressionFalloff = 18
 
 function getPlaneHeightAt(x: number, y: number): number {
     const r = Math.hypot(x, y)
@@ -74,7 +74,7 @@ function createDepressedPlane(): THREE.Mesh {
 
     const plane = new THREE.Mesh(geometry, material)
     plane.position.set(0, 0, 0)
-    plane.rotation.x = -1.15
+    plane.rotation.x = -1.3
     plane.rotation.y = 0
     return plane
 }
@@ -82,33 +82,6 @@ function createDepressedPlane(): THREE.Mesh {
 const plane = createDepressedPlane()
 scene.add(plane)
 
-let isDraggingPlane = false
-let lastPointerX = 0
-const planeRotationSpeed = 0.005
-
-renderer.domElement.addEventListener('pointerdown', (event) => {
-    isDraggingPlane = true
-    lastPointerX = event.clientX
-})
-
-window.addEventListener('pointermove', (event) => {
-    if (!isDraggingPlane) {
-        return
-    }
-    const deltaX = event.clientX - lastPointerX
-    lastPointerX = event.clientX
-    plane.rotation.x += deltaX * planeRotationSpeed
-
-    console.log(plane.rotation.x)
-})
-
-window.addEventListener('pointerup', () => {
-    isDraggingPlane = false
-})
-
-window.addEventListener('pointerleave', () => {
-    isDraggingPlane = false
-})
 
 type LetterCell = {
     ringIndex: number
@@ -248,6 +221,7 @@ const sphere = new THREE.Mesh(
         ...baseMaterialParams
     })
 )
+sphere.position.y = -0.5
 scene.add(sphere)
 
 const planeMaterial = plane.material as THREE.MeshStandardMaterial
@@ -267,8 +241,8 @@ window.addEventListener('resize', onResize)
 function animate() {
     requestAnimationFrame(animate)
     const delta = clock.getDelta()
-    sphere.rotation.y += 0.003
-    sphere.rotation.x += 0.0015
+    sphere.rotation.y = 0
+    sphere.rotation.x -= 0.003
 
     flowOffset = (flowOffset + gridFlowSpeed * delta) % half
 
