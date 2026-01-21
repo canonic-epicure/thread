@@ -24,7 +24,6 @@ type SphereControllerOptions = {
 
 type SphereController = {
     sphere: THREE.Mesh
-    sphereMaterial: THREE.MeshStandardMaterial
     updateSphere: (delta: number) => void
 }
 
@@ -126,7 +125,6 @@ export function createSphereController(options: SphereControllerOptions): Sphere
     )
     sphere.position.y = -0.5
 
-    const sphereMaterial = sphere.material as THREE.MeshStandardMaterial
 
     // Raycast hit-testing ensures dragging only starts when clicking the sphere.
     const sphereRaycaster = new THREE.Raycaster()
@@ -214,5 +212,5 @@ export function createSphereController(options: SphereControllerOptions): Sphere
         texture.offset.y = (texture.offset.y + currentScrollSpeed * delta + 1) % 1
     }
 
-    return { sphere, sphereMaterial, updateSphere }
+    return { sphere, updateSphere }
 }

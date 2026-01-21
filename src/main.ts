@@ -63,6 +63,7 @@ scene.add(sphere)
 //     letterFillAlpha,
 //     planeColor: sharedSurface.planeColor
 // })
+// scene.add(plane)
 
 const { spiralPlane, updateSpiral } = createSpiralController({
     renderer,

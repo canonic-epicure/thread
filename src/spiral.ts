@@ -145,7 +145,6 @@ export function createSpiralController(options: SpiralControllerOptions): Spiral
             const py = (1 - v) * spiralCanvas.height
 
             const char = SPIRAL_TEXT[i % SPIRAL_TEXT.length]
-            // spiralCtx.fillStyle = `rgba(255,255,255,0.9)`
             spiralCtx.save()
             spiralCtx.translate(px, py)
             spiralCtx.rotate(Math.atan2(y, -x) + Math.PI / 2)
