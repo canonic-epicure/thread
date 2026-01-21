@@ -11,18 +11,18 @@ import * as THREE from 'three'
 
 type PlaneControllerOptions = {
     renderer: THREE.WebGLRenderer
-    scene: THREE.Scene
     materialParams: {
         color: number
         roughness: number
         metalness: number
     }
-    letterColor: string
+    planeColor: number
     gridColor: string
     letterFillAlpha: number
 }
 
 type PlaneController = {
+    plane: THREE.Mesh
     planeMaterial: THREE.MeshStandardMaterial
     updatePlane: (delta: number) => void
 }
@@ -111,10 +111,9 @@ function createLetterCells(): LetterCell[] {
 }
 
 export function createPlaneController(options: PlaneControllerOptions): PlaneController {
-    const { renderer, scene, materialParams, gridColor, letterFillAlpha } = options
+    const { renderer, materialParams, planeColor, gridColor, letterFillAlpha } = options
 
     const plane = createDepressedPlane(materialParams)
-    scene.add(plane)
 
     const half = PLANE_SIZE / 2
     const ringStep = half / RADIAL_COUNT
@@ -152,6 +151,7 @@ export function createPlaneController(options: PlaneControllerOptions): PlaneCon
     plane.add(letterOverlay)
 
     const planeMaterial = plane.material as THREE.MeshStandardMaterial
+    planeMaterial.color.set(planeColor)
     let flowOffset = 0
 
     // Draws the rings/spokes and letters each frame based on the flowing radius offset.
@@ -223,5 +223,5 @@ export function createPlaneController(options: PlaneControllerOptions): PlaneCon
         letterTexture.needsUpdate = true
     }
 
-    return { planeMaterial, updatePlane }
+    return { plane, planeMaterial, updatePlane }
 }

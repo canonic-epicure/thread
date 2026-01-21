@@ -13,7 +13,6 @@ import { LONG_TEXT } from './longText'
 type SphereControllerOptions = {
     renderer: THREE.WebGLRenderer
     camera: THREE.PerspectiveCamera
-    scene: THREE.Scene
     materialParams: {
         color: number
         roughness: number
@@ -24,6 +23,7 @@ type SphereControllerOptions = {
 }
 
 type SphereController = {
+    sphere: THREE.Mesh
     sphereMaterial: THREE.MeshStandardMaterial
     updateSphere: (delta: number) => void
 }
@@ -107,7 +107,7 @@ function createSphereTexture(
 }
 
 export function createSphereController(options: SphereControllerOptions): SphereController {
-    const { renderer, camera, scene, materialParams, letterColor, gridColor } = options
+    const { renderer, camera, materialParams, letterColor, gridColor } = options
     const texture = createSphereTexture(renderer, letterColor, gridColor)
     // Repeat wrapping allows endless vertical scrolling on the sphere.
     texture.wrapS = THREE.RepeatWrapping
@@ -125,7 +125,6 @@ export function createSphereController(options: SphereControllerOptions): Sphere
         })
     )
     sphere.position.y = -0.5
-    scene.add(sphere)
 
     const sphereMaterial = sphere.material as THREE.MeshStandardMaterial
 
@@ -215,5 +214,5 @@ export function createSphereController(options: SphereControllerOptions): Sphere
         texture.offset.y = (texture.offset.y + currentScrollSpeed * delta + 1) % 1
     }
 
-    return { sphereMaterial, updateSphere }
+    return { sphere, sphereMaterial, updateSphere }
 }

@@ -33,34 +33,37 @@ const letterFillAlpha = 0.75
 const letterColor = `rgba(255,255,255,${letterFillAlpha})`
 const gridColor = `rgba(255,255,255,${letterFillAlpha})`
 
-const baseMaterialParams = {
-    color: 0xffffff,
+const sharedSurface = {
     roughness: 0.6,
-    metalness: 0.1
+    metalness: 0.1,
+    sphereColor: 0xffffff,
+    planeColor: 0x000000
 }
 
-const { sphereMaterial, updateSphere } = createSphereController({
+const baseMaterialParams = {
+    color: sharedSurface.sphereColor,
+    roughness: sharedSurface.roughness,
+    metalness: sharedSurface.metalness
+}
+
+const { sphere, updateSphere } = createSphereController({
     renderer,
     camera,
-    scene,
     materialParams: baseMaterialParams,
     letterColor,
     gridColor
 })
 
-const { planeMaterial, updatePlane } = createPlaneController({
+const { plane, updatePlane } = createPlaneController({
     renderer,
-    scene,
     materialParams: baseMaterialParams,
-    letterColor,
     gridColor,
-    letterFillAlpha
+    letterFillAlpha,
+    planeColor: sharedSurface.planeColor
 })
 
-planeMaterial.color.copy(sphereMaterial.color)
-planeMaterial.roughness = sphereMaterial.roughness
-planeMaterial.metalness = sphereMaterial.metalness
-planeMaterial.color.set(0x000000)
+scene.add(sphere)
+scene.add(plane)
 
 
 function onResize() {
