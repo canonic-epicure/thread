@@ -33,7 +33,6 @@ scene.add(ambient, directional)
 const letterFillAlpha = 0.75
 const letterColor = `rgba(255,255,255,${letterFillAlpha})`
 const gridColor = `rgba(255,255,255,${letterFillAlpha})`
-const spiralLetterColor = 0x000000
 
 const sharedSurface = {
     roughness: 0.6,
@@ -69,7 +68,7 @@ scene.add(sphere)
 const { spiralPlane, updateSpiral } = createSpiralController({
     renderer,
     materialParams: baseMaterialParams,
-    planeColor: spiralLetterColor,
+    planeColor: 0x0b0b0b,
     letterColor: 0xffffff
 })
 scene.add(spiralPlane)

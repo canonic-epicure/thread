@@ -17,7 +17,7 @@ type SpiralController = {
 }
 
 const PLANE_SIZE = 25
-const PLANE_SEGMENTS = 200
+const PLANE_SEGMENTS = 350
 const DEPRESSION_RADIUS = 3.1
 const DEPRESSION_DEPTH = 15.4
 const DEPRESSION_FALLOFF = 18
@@ -26,6 +26,8 @@ const SPIRAL_TURNS = 51
 const SPIRAL_FLOW_SPEED = 0.0003
 const SPIRAL_LETTER_COUNT = SPIRAL_TURNS * 100
 const SPIRAL_TEXT = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'
+const SPIRAL_ALPHA_EDGE = 0
+const SPIRAL_ALPHA_CENTER = 1.0
 
 function getPlaneHeightAt(x: number, y: number): number {
     const r = Math.hypot(x, y)
@@ -106,7 +108,11 @@ export function createSpiralController(options: SpiralControllerOptions): Spiral
     const half = PLANE_SIZE / 2
 
     const letterColor = new THREE.Color(options.letterColor)
-    const letterHex = `#${letterColor.getHexString()}`
+    const letterRgb = {
+        r: Math.round(letterColor.r * 255),
+        g: Math.round(letterColor.g * 255),
+        b: Math.round(letterColor.b * 255)
+    }
 
     const updateSpiral = (delta: number) => {
         spiralProgress = (spiralProgress + SPIRAL_FLOW_SPEED * delta) % 1
@@ -130,7 +136,11 @@ export function createSpiralController(options: SpiralControllerOptions): Spiral
             const py = (1 - v) * spiralCanvas.height
 
             const char = SPIRAL_TEXT[i % SPIRAL_TEXT.length]
-            spiralCtx.fillStyle = letterHex
+            const edgeT = Math.min(1, Math.max(0, radius / half))
+            const alpha =
+                SPIRAL_ALPHA_EDGE +
+                (1 - edgeT) * (SPIRAL_ALPHA_CENTER - SPIRAL_ALPHA_EDGE)
+            spiralCtx.fillStyle = `rgba(${letterRgb.r}, ${letterRgb.g}, ${letterRgb.b}, ${alpha})`
             spiralCtx.save()
             spiralCtx.translate(px, py)
             spiralCtx.rotate(Math.atan2(y, -x) + Math.PI / 2)
