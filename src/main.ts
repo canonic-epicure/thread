@@ -80,7 +80,7 @@ function createDepressedPlane(): THREE.Mesh {
 }
 
 const plane = createDepressedPlane()
-scene.add(plane)
+// scene.add(plane)
 
 
 type LetterCell = {
