@@ -1,4 +1,5 @@
 import * as THREE from 'three'
+import { LONG_TEXT } from './longText'
 import './style.css'
 
 const app = document.querySelector<HTMLDivElement>('#app')
@@ -161,10 +162,7 @@ createLetterCells()
 
 
 function createGridTexture(renderer: THREE.WebGLRenderer): THREE.CanvasTexture {
-    const size = 1024
-    const cells = 10
-    const cellSize = size / cells
-
+    const size = 2048
     const canvas = document.createElement('canvas')
     canvas.width = size
     canvas.height = size
@@ -174,35 +172,43 @@ function createGridTexture(renderer: THREE.WebGLRenderer): THREE.CanvasTexture {
     }
 
     ctx.clearRect(0, 0, size, size)
+    ctx.fillStyle = 'black'
+    ctx.fillRect(0, 0, size, size)
+
+    const columnCount = 32
+    const rowCount = 20
+    const cellWidth = size / columnCount
+    const cellHeight = size / rowCount
+
     ctx.strokeStyle = gridColor
     ctx.lineWidth = 2
-
-    for (let i = 0; i <= cells; i += 1) {
-        const p = i * cellSize
+    for (let i = 0; i <= columnCount; i += 1) {
+        const x = i * cellWidth
         ctx.beginPath()
-        ctx.moveTo(p, 0)
-        ctx.lineTo(p, size)
+        ctx.moveTo(x, 0)
+        ctx.lineTo(x, size)
         ctx.stroke()
-
+    }
+    for (let j = 0; j <= rowCount; j += 1) {
+        const y = j * cellHeight
         ctx.beginPath()
-        ctx.moveTo(0, p)
-        ctx.lineTo(size, p)
+        ctx.moveTo(0, y)
+        ctx.lineTo(size, y)
         ctx.stroke()
     }
 
-    const letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'
     ctx.fillStyle = letterColor
     ctx.textAlign = 'center'
     ctx.textBaseline = 'middle'
-    ctx.font = 'bold 48px monospace'
+    ctx.font = 'bold 40px monospace'
 
     let index = 0
-    for (let y = 0; y < cells; y += 1) {
-        for (let x = 0; x < cells; x += 1) {
-            const letter = letters[index % letters.length]
-            const cx = x * cellSize + cellSize / 2
-            const cy = y * cellSize + cellSize / 2
-            ctx.fillText(letter, cx, cy)
+    for (let row = 0; row < rowCount; row += 1) {
+        for (let col = 0; col < columnCount; col += 1) {
+            const char = LONG_TEXT[index % LONG_TEXT.length]
+            const cx = col * cellWidth + cellWidth / 2
+            const cy = row * cellHeight + cellHeight / 2
+            ctx.fillText(char, cx, cy)
             index += 1
         }
     }
@@ -214,6 +220,12 @@ function createGridTexture(renderer: THREE.WebGLRenderer): THREE.CanvasTexture {
 }
 
 const texture = createGridTexture(renderer)
+texture.wrapS = THREE.RepeatWrapping
+texture.wrapT = THREE.RepeatWrapping
+texture.repeat.set(1, 1)
+texture.offset.set(0, 0)
+
+const sphereTextureScrollSpeed = 0.04
 const sphere = new THREE.Mesh(
     new THREE.SphereGeometry(1, 64, 64),
     new THREE.MeshStandardMaterial({
@@ -231,6 +243,7 @@ planeMaterial.roughness = sphereMaterial.roughness
 planeMaterial.metalness = sphereMaterial.metalness
 planeMaterial.color.set(0x000000)
 
+
 function onResize() {
     camera.aspect = window.innerWidth / window.innerHeight
     camera.updateProjectionMatrix()
@@ -242,7 +255,9 @@ function animate() {
     requestAnimationFrame(animate)
     const delta = clock.getDelta()
     sphere.rotation.y = 0
-    sphere.rotation.x -= 0.003
+    sphere.rotation.x = 0
+    texture.offset.y =
+        (texture.offset.y - sphereTextureScrollSpeed * delta + 1) % 1
 
     flowOffset = (flowOffset + gridFlowSpeed * delta) % half
 
