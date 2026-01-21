@@ -53,6 +53,7 @@ const { sphere, updateSphere } = createSphereController({
     letterColor,
     gridColor
 })
+scene.add(sphere)
 
 const { plane, updatePlane } = createPlaneController({
     renderer,
@@ -61,8 +62,6 @@ const { plane, updatePlane } = createPlaneController({
     letterFillAlpha,
     planeColor: sharedSurface.planeColor
 })
-
-scene.add(sphere)
 scene.add(plane)
 
 
