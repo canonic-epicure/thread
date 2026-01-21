@@ -29,7 +29,7 @@ const directional = new THREE.DirectionalLight(0xffffff, 0.8)
 directional.position.set(2, 3, 4)
 scene.add(ambient, directional)
 
-const letterFillAlpha = 0.95
+const letterFillAlpha = 0.75
 const letterColor = `rgba(255,255,255,${letterFillAlpha})`
 const gridColor = `rgba(255,255,255,${letterFillAlpha})`
 

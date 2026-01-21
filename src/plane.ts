@@ -210,7 +210,7 @@ export function createPlaneController(options: PlaneControllerOptions): PlaneCon
             const py = (1 - v) * LETTER_CANVAS_SIZE
 
             const angleScreen = Math.atan2(y, -x)
-            const scaledAlpha = letterFillAlpha * t
+            const scaledAlpha = letterFillAlpha * t * t * t * t
             letterCtx.fillStyle = `rgba(255,255,255,${scaledAlpha})`
             letterCtx.font = `bold ${size}px monospace`
             letterCtx.save()
