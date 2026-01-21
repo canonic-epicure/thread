@@ -1,6 +1,7 @@
 import * as THREE from 'three'
 import { createSphereController } from './sphere'
-import { createPlaneController } from './plane'
+// import { createPlaneController } from './plane'
+import { createSpiralController } from './spiral'
 import './style.css'
 
 const app = document.querySelector<HTMLDivElement>('#app')
@@ -55,14 +56,20 @@ const { sphere, updateSphere } = createSphereController({
 })
 scene.add(sphere)
 
-const { plane, updatePlane } = createPlaneController({
+// const { plane, updatePlane } = createPlaneController({
+//     renderer,
+//     materialParams: baseMaterialParams,
+//     gridColor,
+//     letterFillAlpha,
+//     planeColor: sharedSurface.planeColor
+// })
+
+const { spiralPlane, updateSpiral } = createSpiralController({
     renderer,
     materialParams: baseMaterialParams,
-    gridColor,
-    letterFillAlpha,
     planeColor: sharedSurface.planeColor
 })
-scene.add(plane)
+scene.add(spiralPlane)
 
 
 function onResize() {
@@ -78,7 +85,8 @@ function animate() {
     requestAnimationFrame(animate)
     const delta = clock.getDelta()
     updateSphere(delta)
-    updatePlane(delta)
+    // updatePlane(delta)
+    updateSpiral(delta)
     renderer.render(scene, camera)
 }
 animate()
