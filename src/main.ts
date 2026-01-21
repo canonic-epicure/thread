@@ -227,6 +227,11 @@ texture.repeat.set(1, 1)
 texture.offset.set(1 / (SPHERE_COLUMN_COUNT * 2), 0)
 
 const sphereTextureScrollSpeed = 0.04
+const sphereAutoScrollSpeed = -sphereTextureScrollSpeed
+const sphereDragSpeedFactor = 0.1
+const sphereMaxDragSpeed = 0.2
+const sphereSlowdownTime = 0.3
+const sphereResumeTime = 2.0
 const sphere = new THREE.Mesh(
     new THREE.SphereGeometry(1, 64, 64),
     new THREE.MeshStandardMaterial({
@@ -244,6 +249,70 @@ planeMaterial.roughness = sphereMaterial.roughness
 planeMaterial.metalness = sphereMaterial.metalness
 planeMaterial.color.set(0x000000)
 
+const sphereRaycaster = new THREE.Raycaster()
+const spherePointer = new THREE.Vector2()
+let isSpherePointerDown = false
+let lastPointerY = 0
+let lastPointerTime = 0
+let currentScrollSpeed = sphereAutoScrollSpeed
+let targetScrollSpeed = sphereAutoScrollSpeed
+let currentBaseSpeed = sphereAutoScrollSpeed
+
+renderer.domElement.addEventListener('pointerdown', (event) => {
+    spherePointer.x = (event.clientX / window.innerWidth) * 2 - 1
+    spherePointer.y = -(event.clientY / window.innerHeight) * 2 + 1
+    sphereRaycaster.setFromCamera(spherePointer, camera)
+    const hit = sphereRaycaster.intersectObject(sphere, false)
+    if (hit.length === 0) {
+        return
+    }
+    isSpherePointerDown = true
+    currentBaseSpeed = 0
+    lastPointerY = event.clientY
+    lastPointerTime = performance.now()
+    renderer.domElement.setPointerCapture(event.pointerId)
+})
+
+renderer.domElement.addEventListener('pointermove', (event) => {
+    if (!isSpherePointerDown) {
+        return
+    }
+    const now = performance.now()
+    const deltaY = event.clientY - lastPointerY
+    const deltaTime = Math.max(8, now - lastPointerTime)
+    lastPointerY = event.clientY
+    lastPointerTime = now
+    const velocity = deltaY / deltaTime
+    const impulse = THREE.MathUtils.clamp(
+        velocity * sphereDragSpeedFactor,
+        -sphereMaxDragSpeed,
+        sphereMaxDragSpeed
+    )
+    currentScrollSpeed = THREE.MathUtils.clamp(
+        currentScrollSpeed + impulse,
+        -sphereMaxDragSpeed,
+        sphereMaxDragSpeed
+    )
+})
+
+renderer.domElement.addEventListener('pointerup', (event) => {
+    if (!isSpherePointerDown) {
+        return
+    }
+    isSpherePointerDown = false
+    currentBaseSpeed = sphereAutoScrollSpeed
+    renderer.domElement.releasePointerCapture(event.pointerId)
+})
+
+renderer.domElement.addEventListener('pointercancel', (event) => {
+    if (!isSpherePointerDown) {
+        return
+    }
+    isSpherePointerDown = false
+    currentBaseSpeed = sphereAutoScrollSpeed
+    renderer.domElement.releasePointerCapture(event.pointerId)
+})
+
 
 function onResize() {
     camera.aspect = window.innerWidth / window.innerHeight
@@ -257,8 +326,15 @@ function animate() {
     const delta = clock.getDelta()
     sphere.rotation.y = 0
     sphere.rotation.x = 0
-    texture.offset.y =
-        (texture.offset.y - sphereTextureScrollSpeed * delta + 1) % 1
+
+    targetScrollSpeed = currentBaseSpeed
+
+    const timeConstant =
+        targetScrollSpeed === 0 ? sphereSlowdownTime : sphereResumeTime
+    const smoothing = 1 - Math.exp(-delta / timeConstant)
+    currentScrollSpeed += (targetScrollSpeed - currentScrollSpeed) * smoothing
+
+    texture.offset.y = (texture.offset.y + currentScrollSpeed * delta + 1) % 1
 
     flowOffset = (flowOffset + gridFlowSpeed * delta) % half
 
