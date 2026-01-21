@@ -8,6 +8,7 @@ type SpiralControllerOptions = {
         metalness: number
     }
     planeColor: number
+    letterColor: number
 }
 
 type SpiralController = {
@@ -22,8 +23,6 @@ const DEPRESSION_DEPTH = 15.4
 const DEPRESSION_FALLOFF = 18
 
 const SPIRAL_TURNS = 51
-const SPIRAL_POINTS = SPIRAL_TURNS * 100
-const SPIRAL_LINE_COLOR = 0xffffff
 const SPIRAL_FLOW_SPEED = 0.0003
 const SPIRAL_LETTER_COUNT = SPIRAL_TURNS * 100
 const SPIRAL_TEXT = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'
@@ -39,7 +38,7 @@ function getPlaneHeightAt(x: number, y: number): number {
 
 function createDepressedPlane(
     materialParams: SpiralControllerOptions['materialParams'],
-    _planeColor: number
+    planeColor: number
 ): THREE.Mesh {
     const geometry = new THREE.PlaneGeometry(PLANE_SIZE, PLANE_SIZE, PLANE_SEGMENTS, PLANE_SEGMENTS)
     const position = geometry.attributes.position
@@ -54,6 +53,7 @@ function createDepressedPlane(
 
     const material = new THREE.MeshStandardMaterial({
         ...materialParams,
+        color: planeColor,
         transparent: true,
         side: THREE.DoubleSide
     })
@@ -65,28 +65,9 @@ function createDepressedPlane(
     return plane
 }
 
-function createSpiralLine(): THREE.Line {
-    const half = PLANE_SIZE / 2
-    const points: THREE.Vector3[] = []
-    for (let i = 0; i < SPIRAL_POINTS; i += 1) {
-        const t = i / (SPIRAL_POINTS - 1)
-        const radius = half - t * (half - 0.2)
-        const angle = SPIRAL_TURNS * Math.PI * 2 * t
-        const x = radius * Math.cos(angle)
-        const y = radius * Math.sin(angle)
-        const z = getPlaneHeightAt(x, y) + 0.02
-        points.push(new THREE.Vector3(x, y, z))
-    }
-    const geometry = new THREE.BufferGeometry().setFromPoints(points)
-    const material = new THREE.LineBasicMaterial({ color: SPIRAL_LINE_COLOR })
-    return new THREE.Line(geometry, material)
-}
 
 export function createSpiralController(options: SpiralControllerOptions): SpiralController {
     const plane = createDepressedPlane(options.materialParams, options.planeColor)
-    // Keep the line for reference; letters will travel along the same spiral path.
-    // const spiralLine = createSpiralLine()
-    // plane.add(spiralLine)
 
     const spiralCanvas = document.createElement('canvas')
     spiralCanvas.width = 4096
@@ -114,7 +95,8 @@ export function createSpiralController(options: SpiralControllerOptions): Spiral
             opacity: 1,
             alphaTest: 0.25,
             depthWrite: false,
-            ...options.materialParams
+            ...options.materialParams,
+            color: options.letterColor
         })
     )
     spiralOverlay.renderOrder = 2
@@ -122,6 +104,9 @@ export function createSpiralController(options: SpiralControllerOptions): Spiral
 
     let spiralProgress = 0
     const half = PLANE_SIZE / 2
+
+    const letterColor = new THREE.Color(options.letterColor)
+    const letterHex = `#${letterColor.getHexString()}`
 
     const updateSpiral = (delta: number) => {
         spiralProgress = (spiralProgress + SPIRAL_FLOW_SPEED * delta) % 1
@@ -145,6 +130,7 @@ export function createSpiralController(options: SpiralControllerOptions): Spiral
             const py = (1 - v) * spiralCanvas.height
 
             const char = SPIRAL_TEXT[i % SPIRAL_TEXT.length]
+            spiralCtx.fillStyle = letterHex
             spiralCtx.save()
             spiralCtx.translate(px, py)
             spiralCtx.rotate(Math.atan2(y, -x) + Math.PI / 2)

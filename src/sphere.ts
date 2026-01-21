@@ -8,7 +8,7 @@
       back to the default auto-scroll speed over time.
 */
 import * as THREE from 'three'
-import { LONG_TEXT } from './longText'
+import { LONG_TEXT } from './text'
 
 type SphereControllerOptions = {
     renderer: THREE.WebGLRenderer
@@ -37,7 +37,7 @@ const SPHERE_TEXTURE_OFFSET = 1 / (SPHERE_COLUMN_COUNT * 2)
 const sphereTextureScrollSpeed = 0.04
 const sphereAutoScrollSpeed = -sphereTextureScrollSpeed
 const sphereDragSpeedFactor = 0.1
-const sphereMaxDragSpeed = 0.2
+const sphereMaxDragSpeed = 0.4
 const sphereSlowdownTime = 0.3
 const sphereResumeTime = 2.0
 

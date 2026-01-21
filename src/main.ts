@@ -33,6 +33,7 @@ scene.add(ambient, directional)
 const letterFillAlpha = 0.75
 const letterColor = `rgba(255,255,255,${letterFillAlpha})`
 const gridColor = `rgba(255,255,255,${letterFillAlpha})`
+const spiralLetterColor = 0x000000
 
 const sharedSurface = {
     roughness: 0.6,
@@ -68,7 +69,8 @@ scene.add(sphere)
 const { spiralPlane, updateSpiral } = createSpiralController({
     renderer,
     materialParams: baseMaterialParams,
-    planeColor: sharedSurface.planeColor
+    planeColor: spiralLetterColor,
+    letterColor: 0xffffff
 })
 scene.add(spiralPlane)
 
@@ -80,7 +82,16 @@ function onResize() {
 }
 window.addEventListener('resize', onResize)
 
+window.addEventListener('resize', onResize);
+// window.addEventListener('mousemove', (event) => {
+//     mouseX = (event.clientX / window.innerWidth) * 2 - 1
+// })
+
+
 const clock = new THREE.Clock()
+
+let cameraShakeY = 0
+// let mouseX = 0
 
 function animate() {
     requestAnimationFrame(animate)
@@ -88,6 +99,13 @@ function animate() {
     updateSphere(delta)
     // updatePlane(delta)
     updateSpiral(delta)
+
+    camera.position.y += Math.cos(cameraShakeY) / 500
+    cameraShakeY += 0.02
+
+    // // mouse camera move
+    // camera.position.x += ((mouseX * 5) - camera.position.x) * 0.001
+
     renderer.render(scene, camera)
 }
 animate()
