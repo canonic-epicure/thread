@@ -40,7 +40,7 @@ const baseMaterialParams = {
 
 const planeSize = 25
 const depressionRadius = 3.1
-const depressionDepth = 18.4
+const depressionDepth = 15.4
 const depressionFalloff = 18
 
 function getPlaneHeightAt(x: number, y: number): number {
@@ -81,7 +81,7 @@ function createDepressedPlane(): THREE.Mesh {
 }
 
 const plane = createDepressedPlane()
-// scene.add(plane)
+scene.add(plane)
 
 
 type LetterCell = {
@@ -175,7 +175,7 @@ function createGridTexture(renderer: THREE.WebGLRenderer): THREE.CanvasTexture {
     ctx.fillStyle = 'black'
     ctx.fillRect(0, 0, size, size)
 
-    const columnCount = 32
+    const columnCount = SPHERE_COLUMN_COUNT
     const rowCount = 20
     const cellWidth = size / columnCount
     const cellHeight = size / rowCount
@@ -202,14 +202,14 @@ function createGridTexture(renderer: THREE.WebGLRenderer): THREE.CanvasTexture {
     ctx.textBaseline = 'middle'
     ctx.font = 'bold 40px monospace'
 
-    let index = 0
-    for (let row = 0; row < rowCount; row += 1) {
-        for (let col = 0; col < columnCount; col += 1) {
-            const char = LONG_TEXT[index % LONG_TEXT.length]
+    for (let col = 0; col < columnCount; col += 1) {
+        const columnOffset = (col * 7) % LONG_TEXT.length
+        for (let row = 0; row < rowCount; row += 1) {
+            const index = (columnOffset + row) % LONG_TEXT.length
+            const char = LONG_TEXT[index]
             const cx = col * cellWidth + cellWidth / 2
             const cy = row * cellHeight + cellHeight / 2
             ctx.fillText(char, cx, cy)
-            index += 1
         }
     }
 
@@ -219,11 +219,12 @@ function createGridTexture(renderer: THREE.WebGLRenderer): THREE.CanvasTexture {
     return texture
 }
 
+const SPHERE_COLUMN_COUNT = 32
 const texture = createGridTexture(renderer)
 texture.wrapS = THREE.RepeatWrapping
 texture.wrapT = THREE.RepeatWrapping
 texture.repeat.set(1, 1)
-texture.offset.set(0, 0)
+texture.offset.set(1 / (SPHERE_COLUMN_COUNT * 2), 0)
 
 const sphereTextureScrollSpeed = 0.04
 const sphere = new THREE.Mesh(
@@ -306,7 +307,7 @@ function animate() {
             Math.max(0, (radius - fadeEnd) / (fadeStart - fadeEnd))
         )
         const alpha = t
-        const size = 24 + 10 * t
+        const size = 18 + 6 * t
 
         const u = (x + half) / planeSize
         const v = (y + half) / planeSize
