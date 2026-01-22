@@ -34,7 +34,7 @@ const SPIRAL_ALPHA_CENTER = 1.0
 
 const SPIRAL_STRING_OFFSET_RADIUS = 16
 const SPIRAL_RETURN_DELAY = 0.6
-const SPIRAL_RETURN_DURATION = 1.5
+const SPIRAL_RETURN_DURATION = 0.5
 const SPIRAL_RELEASE_DURATION = 2.0
 const SPIRAL_STOP_THRESHOLD = 0.005
 
@@ -43,17 +43,20 @@ const SPIRAL_ENTRIES = Array.from(LONG_TEXT).map((char, index) => ({
     originalIndex: index,
     alteredIndex:
         index +
-        Math.floor(Math.random() * (SPIRAL_STRING_OFFSET_RADIUS * 2 + 1)) -
-            SPIRAL_STRING_OFFSET_RADIUS,
-    displacedIndex: 0
+        Math.floor(Math.random() * (SPIRAL_STRING_OFFSET_RADIUS * 2 + 1)) - SPIRAL_STRING_OFFSET_RADIUS
 }))
-
-const SPIRAL_DISPLACED_ORDER = [...SPIRAL_ENTRIES].sort(
-    (a, b) => a.alteredIndex - b.alteredIndex
-)
-SPIRAL_DISPLACED_ORDER.forEach((entry, index) => {
-    entry.displacedIndex = index
+SPIRAL_ENTRIES.sort((a, b) => a.alteredIndex - b.alteredIndex)
+SPIRAL_ENTRIES.forEach((entry, index) => {
+    entry.alteredIndex = index
 })
+
+const SPIRAL_SAMPLE_INDICES = (() => {
+    const total = SPIRAL_ENTRIES.length
+    const step = total / SPIRAL_LETTER_COUNT
+    return Array.from({ length: SPIRAL_LETTER_COUNT }, (_, i) => {
+        return Math.floor(i * step) % total
+    })
+})()
 
 function getPlaneHeightAt(x: number, y: number): number {
     const r = Math.hypot(x, y)
@@ -140,8 +143,16 @@ export function createSpiralController(options: SpiralControllerOptions): Spiral
         b: Math.round(letterColor.b * 255)
     }
 
-    const updateSpiral = (delta: number) => {
-        spiralProgress = (spiralProgress + SPIRAL_FLOW_SPEED * delta) % 1
+    let blend = 0
+    let blendTarget = 0
+    let returnDelayRemaining = SPIRAL_RETURN_DELAY
+
+    const updateSpiral = (
+        delta: number,
+        sphereState: { isPointerDown: boolean; scrollSpeed: number }
+    ) => {
+        spiralProgress = spiralProgress + SPIRAL_FLOW_SPEED * delta
+
         spiralCtx.clearRect(0, 0, spiralCanvas.width, spiralCanvas.height)
 
         spiralCtx.imageSmoothingEnabled = false
@@ -149,23 +160,53 @@ export function createSpiralController(options: SpiralControllerOptions): Spiral
         spiralCtx.textBaseline = 'middle'
         spiralCtx.font = 'bold 18px monospace'
 
+        const isStopped = Math.abs(sphereState.scrollSpeed) <= SPIRAL_STOP_THRESHOLD
+        if (sphereState.isPointerDown && isStopped) {
+            returnDelayRemaining = Math.max(0, returnDelayRemaining - delta)
+            if (returnDelayRemaining === 0) {
+                blendTarget = 1
+            }
+        } else {
+            returnDelayRemaining = SPIRAL_RETURN_DELAY
+            blendTarget = 0
+        }
+
+        const duration = blendTarget === 1 ? SPIRAL_RETURN_DURATION : SPIRAL_RELEASE_DURATION
+        const smoothing = 1 - Math.exp(-delta / duration)
+        blend += (blendTarget - blend) * smoothing
+
+        const total = SPIRAL_ENTRIES.length
+
         for (let i = 0; i < SPIRAL_LETTER_COUNT; i += 1) {
-            const t = (i / SPIRAL_LETTER_COUNT + spiralProgress) % 1
-            const radius = half - t * (half - 0.2)
-            const angle = SPIRAL_TURNS * Math.PI * 2 * t
-            const x = radius * Math.cos(angle)
-            const y = radius * Math.sin(angle)
+            const entry = SPIRAL_ENTRIES[SPIRAL_SAMPLE_INDICES[i]]
+            const tOriginal = (entry.originalIndex / total + spiralProgress) % 1
+            const tDisplaced = (entry.alteredIndex / total + spiralProgress) % 1
+
+            const radiusOriginal = half - tOriginal * (half - 0.2)
+            const angleOriginal = SPIRAL_TURNS * Math.PI * 2 * tOriginal
+            const xOriginal = radiusOriginal * Math.cos(angleOriginal)
+            const yOriginal = radiusOriginal * Math.sin(angleOriginal)
+
+            const radiusDisplaced = half - tDisplaced * (half - 0.2)
+            const angleDisplaced = SPIRAL_TURNS * Math.PI * 2 * tDisplaced
+            const xDisplaced = radiusDisplaced * Math.cos(angleDisplaced)
+            const yDisplaced = radiusDisplaced * Math.sin(angleDisplaced)
+
+            const x = xDisplaced + (xOriginal - xDisplaced) * blend
+            const y = yDisplaced + (yOriginal - yDisplaced) * blend
 
             const u = (x + half) / PLANE_SIZE
             const v = (y + half) / PLANE_SIZE
             const px = u * spiralCanvas.width
             const py = (1 - v) * spiralCanvas.height
 
-            const char = SPIRAL_TEXT[i % SPIRAL_TEXT.length]
-            const edgeT = Math.min(1, Math.max(0, radius / half))
+            const char = entry.char
+            const edgeT = Math.min(1, Math.max(0, Math.hypot(x, y) / half))
+
             const alpha =
                 SPIRAL_ALPHA_EDGE +
                 (1 - edgeT) * (SPIRAL_ALPHA_CENTER - SPIRAL_ALPHA_EDGE)
+
             spiralCtx.fillStyle = `rgba(${letterRgb.r}, ${letterRgb.g}, ${letterRgb.b}, ${alpha})`
             spiralCtx.save()
             spiralCtx.translate(px, py)
