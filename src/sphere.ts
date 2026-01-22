@@ -25,6 +25,7 @@ type SphereControllerOptions = {
 type SphereController = {
     sphere: THREE.Mesh
     updateSphere: (delta: number) => void
+    getSphereState: () => { isPointerDown: boolean; scrollSpeed: number }
 }
 
 // Grid layout for the sphere texture (rectangular cells wrapped onto the sphere).
@@ -212,5 +213,10 @@ export function createSphereController(options: SphereControllerOptions): Sphere
         texture.offset.y = (texture.offset.y + currentScrollSpeed * delta + 1) % 1
     }
 
-    return { sphere, updateSphere }
+    const getSphereState = () => ({
+        isPointerDown: isSpherePointerDown,
+        scrollSpeed: currentScrollSpeed
+    })
+
+    return { sphere, updateSphere, getSphereState }
 }

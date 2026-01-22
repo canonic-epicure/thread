@@ -47,7 +47,7 @@ const baseMaterialParams = {
     metalness: sharedSurface.metalness
 }
 
-const { sphere, updateSphere } = createSphereController({
+const { sphere, updateSphere, getSphereState } = createSphereController({
     renderer,
     camera,
     materialParams: baseMaterialParams,
@@ -97,7 +97,7 @@ function animate() {
     const delta = clock.getDelta()
     updateSphere(delta)
     // updatePlane(delta)
-    updateSpiral(delta)
+    updateSpiral(delta, getSphereState())
 
     camera.position.y += Math.cos(cameraShakeY) / 500
     cameraShakeY += 0.02
