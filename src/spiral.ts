@@ -1,4 +1,5 @@
 import * as THREE from 'three'
+import { LONG_TEXT } from './text'
 
 type SpiralControllerOptions = {
     renderer: THREE.WebGLRenderer
@@ -13,7 +14,10 @@ type SpiralControllerOptions = {
 
 type SpiralController = {
     spiralPlane: THREE.Mesh
-    updateSpiral: (delta: number) => void
+    updateSpiral: (
+        delta: number,
+        sphereState: { isPointerDown: boolean; scrollSpeed: number }
+    ) => void
 }
 
 const PLANE_SIZE = 25
@@ -25,9 +29,31 @@ const DEPRESSION_FALLOFF = 18
 const SPIRAL_TURNS = 51
 const SPIRAL_FLOW_SPEED = 0.0003
 const SPIRAL_LETTER_COUNT = SPIRAL_TURNS * 100
-const SPIRAL_TEXT = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'
 const SPIRAL_ALPHA_EDGE = 0
 const SPIRAL_ALPHA_CENTER = 1.0
+
+const SPIRAL_STRING_OFFSET_RADIUS = 16
+const SPIRAL_RETURN_DELAY = 0.6
+const SPIRAL_RETURN_DURATION = 1.5
+const SPIRAL_RELEASE_DURATION = 2.0
+const SPIRAL_STOP_THRESHOLD = 0.005
+
+const SPIRAL_ENTRIES = Array.from(LONG_TEXT).map((char, index) => ({
+    char,
+    originalIndex: index,
+    alteredIndex:
+        index +
+        Math.floor(Math.random() * (SPIRAL_STRING_OFFSET_RADIUS * 2 + 1)) -
+            SPIRAL_STRING_OFFSET_RADIUS,
+    displacedIndex: 0
+}))
+
+const SPIRAL_DISPLACED_ORDER = [...SPIRAL_ENTRIES].sort(
+    (a, b) => a.alteredIndex - b.alteredIndex
+)
+SPIRAL_DISPLACED_ORDER.forEach((entry, index) => {
+    entry.displacedIndex = index
+})
 
 function getPlaneHeightAt(x: number, y: number): number {
     const r = Math.hypot(x, y)
