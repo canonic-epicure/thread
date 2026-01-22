@@ -82,15 +82,15 @@ function onResize() {
 window.addEventListener('resize', onResize)
 
 window.addEventListener('resize', onResize);
-// window.addEventListener('mousemove', (event) => {
-//     mouseX = (event.clientX / window.innerWidth) * 2 - 1
-// })
+window.addEventListener('mousemove', (event) => {
+    mouseX = (event.clientX / window.innerWidth) * 2 - 1
+})
 
 
 const clock = new THREE.Clock()
 
 let cameraShakeY = 0
-// let mouseX = 0
+let mouseX = 0
 
 function animate() {
     requestAnimationFrame(animate)
@@ -102,8 +102,8 @@ function animate() {
     camera.position.y += Math.cos(cameraShakeY) / 500
     cameraShakeY += 0.02
 
-    // // mouse camera move
-    // camera.position.x += ((mouseX * 5) - camera.position.x) * 0.001
+    // mouse camera move
+    camera.position.x += (mouseX * 0.5 - camera.position.x) * 0.02
 
     renderer.render(scene, camera)
 }
