@@ -21,4 +21,4 @@ export const TEXT =
     'THIS IS THE CONSTANT MESSAGE THAT CIRCLES THROUGH THE WORLD AGAIN'
 
 
-export const LONG_TEXT = TEXT.repeat(100)
+export const LONG_TEXT = TEXT.repeat(1000)

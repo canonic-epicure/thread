@@ -32,10 +32,9 @@ const SPIRAL_LETTER_COUNT = SPIRAL_TURNS * 100
 const SPIRAL_ALPHA_EDGE = 0
 const SPIRAL_ALPHA_CENTER = 1.0
 
-const SPIRAL_STRING_OFFSET_RADIUS = 50
 const SPIRAL_RETURN_DELAY = 0.6
-const SPIRAL_RETURN_DURATION = 0.5
-const SPIRAL_RELEASE_DURATION = 2.0
+const SPIRAL_RETURN_DURATION = 5
+const SPIRAL_RELEASE_DURATION = 5
 const SPIRAL_STOP_THRESHOLD = 0.005
 
 type SpiralSlot = {
@@ -46,7 +45,9 @@ type SpiralSlot = {
 }
 
 const SPIRAL_TEXT_CHARS = Array.from(LONG_TEXT)
+const SPIRAL_STRING_OFFSET_RADIUS = 5
 const SPIRAL_OFFSET_RANGE = SPIRAL_STRING_OFFSET_RADIUS * 2 + 1
+const SPIRAL_OFFSET_STD_DEV = SPIRAL_STRING_OFFSET_RADIUS * 0.9
 
 function* createSpiralCharGenerator(chars: string[]): Generator<string> {
     if (chars.length === 0) {
@@ -62,14 +63,31 @@ function* createSpiralCharGenerator(chars: string[]): Generator<string> {
     }
 }
 
+function sampleGaussianOffset(
+    stdDev: number,
+    min: number,
+    max: number
+): number {
+    let u = 0
+    let v = 0
+    while (u === 0) u = Math.random()
+    while (v === 0) v = Math.random()
+    const gaussian = Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v)
+    const value = Math.round(gaussian * stdDev)
+    return Math.max(min, Math.min(max, value))
+}
+
 function createSpiralSlots(generator: Generator<string>): SpiralSlot[] {
     return Array.from({ length: SPIRAL_LETTER_COUNT }, (_, index) => ({
         char: generator.next().value ?? ' ',
         originalIndex: index,
         alteredIndex:
             index +
-            Math.floor(Math.random() * SPIRAL_OFFSET_RANGE) -
-                SPIRAL_STRING_OFFSET_RADIUS,
+            sampleGaussianOffset(
+                SPIRAL_OFFSET_STD_DEV,
+                -SPIRAL_STRING_OFFSET_RADIUS,
+                SPIRAL_STRING_OFFSET_RADIUS
+            ),
         displacedIndex: 0
     }))
 }
@@ -204,8 +222,7 @@ export function createSpiralController(options: SpiralControllerOptions): Spiral
         spiralCtx.textBaseline = 'middle'
         spiralCtx.font = 'bold 18px monospace'
 
-        const isStopped = Math.abs(sphereState.scrollSpeed) <= SPIRAL_STOP_THRESHOLD
-        if (sphereState.isPointerDown && isStopped) {
+        if (sphereState.isPointerDown) {
             returnDelayRemaining = Math.max(0, returnDelayRemaining - delta)
             if (returnDelayRemaining === 0) {
                 blendTarget = 1
