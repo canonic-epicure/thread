@@ -14,8 +14,7 @@ if (!app) {
 }
 
 initSoundCloud(app, {
-    trackUrl:
-        'https://soundcloud.com/shawn-scarber/drawing-by-tomasz-bednarczyk-stretched',
+    trackUrl: 'https://soundcloud.com/shawn-scarber/drawing-by-tomasz-bednarczyk-stretched',
     startMs: 45000
 })
 
@@ -112,12 +111,12 @@ const colorState = {
     spiralPlane: '#5d7a89',
     spiralLetters: '#ffffff'
 }
-const toRgba = (hex: string, alpha: number) => {
+const toRgba = (hex : string, alpha : number) => {
     const color = new THREE.Color(hex)
     const r = Math.round(color.r * 255)
     const g = Math.round(color.g * 255)
     const b = Math.round(color.b * 255)
-    return `rgba(${r},${g},${b},${alpha})`
+    return `rgba(${ r },${ g },${ b },${ alpha })`
 }
 const letterColor = toRgba(colorState.sphereLetters, letterFillAlpha)
 const gridColor = toRgba(colorState.sphereLetters, letterFillAlpha)
@@ -137,11 +136,11 @@ const baseMaterialParams = {
 
 const { sphere, updateSphere, getSphereState, setSphereColor, setSphereLetterColor } =
     createSphereController({
-    renderer,
-    camera,
-    materialParams: baseMaterialParams,
-    letterColor,
-    gridColor
+        renderer,
+        camera,
+        materialParams: baseMaterialParams,
+        letterColor,
+        gridColor
     })
 scene.add(sphere)
 setSphereColor(colorState.sphereColor)
@@ -169,21 +168,21 @@ const colorFolder = gui.addFolder('Colors')
 colorFolder
     .addColor(colorState, 'sphereColor')
     .name('Sphere')
-    .onChange((value: string) => setSphereColor(value))
+    .onChange((value : string) => setSphereColor(value))
 colorFolder
     .addColor(colorState, 'sphereLetters')
     .name('Sphere Letters')
-    .onChange((value: string) =>
+    .onChange((value : string) =>
         setSphereLetterColor(toRgba(value, letterFillAlpha), toRgba(value, letterFillAlpha))
     )
 colorFolder
     .addColor(colorState, 'spiralPlane')
     .name('Spiral Plane')
-    .onChange((value: string) => setSpiralPlaneColor(value))
+    .onChange((value : string) => setSpiralPlaneColor(value))
 colorFolder
     .addColor(colorState, 'spiralLetters')
     .name('Spiral Letters')
-    .onChange((value: string) => setSpiralLetterColor(value))
+    .onChange((value : string) => setSpiralLetterColor(value))
 colorFolder.open()
 const noiseFolder = gui.addFolder('Noise')
 noiseFolder
@@ -203,11 +202,13 @@ function onResize() {
     renderer.setSize(window.innerWidth, window.innerHeight)
     composer.setSize(window.innerWidth, window.innerHeight)
 }
+
 window.addEventListener('resize', onResize)
 
 window.addEventListener('resize', onResize);
 window.addEventListener('mousemove', (event) => {
     mouseX = (event.clientX / window.innerWidth) * 2 - 1
+    mouseY = (event.clientY / window.innerHeight) * 2 - 1
 })
 
 
@@ -215,6 +216,7 @@ const clock = new THREE.Clock()
 
 let cameraShakeY = 0
 let mouseX = 0
+let mouseY = 0
 
 function animate() {
     requestAnimationFrame(animate)
@@ -229,7 +231,11 @@ function animate() {
     // mouse camera move
     camera.position.x += (mouseX * 0.5 - camera.position.x) * 0.02
 
+    camera.position.y += (-mouseY * 0.3 - camera.position.y) * 0.02
+    camera.position.y = Math.max(camera.position.y, -1)
+
     noisePass.uniforms.uTime.value += delta
     composer.render()
 }
+
 animate()
