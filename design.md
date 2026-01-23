@@ -1,6 +1,6 @@
 # Design Overview
 
-This project renders a single Three.js scene with a text‑mapped sphere and a surrounding depressed plane. The experience is driven by animated text flow, inertia‑based interaction on the sphere, and a spiral text pattern on the plane. The system is designed so that the sphere appears to be covered in scrolling text, while the plane provides a large visual context with a central sink and a spiral of letters converging toward it.
+This project renders a single Three.js WebGL scene with a text‑mapped sphere and a surrounding depressed plane. The experience is driven by animated text flow, inertia‑based interaction on the sphere, and a spiral of letters that flows toward a central sink. The system is designed so the sphere appears covered in scrolling text, while the plane provides a large context with a dense spiral of characters converging to the center.
 
 ## Core Goals
 - Present a centered 3D sphere whose surface is covered by a rectangular grid of letters.
@@ -8,84 +8,80 @@ This project renders a single Three.js scene with a text‑mapped sphere and a s
 - Provide a large, shallow plane around the sphere with a central depression (“sink”).
 - Render a spiral of letters on the plane, moving along the spiral path toward the center.
 - Allow interactive control over the sphere’s text flow with inertia and smooth return to auto‑scroll.
-- Maintain clear visual separation between sphere text, plane text, and the plane surface.
+- Keep the spiral letters anchored to the curved surface and oriented toward the center.
 
 ## Scene Composition
 ### Camera
 - Perspective camera positioned forward on the Z axis, aimed at the origin.
-- Subtle camera drift/float and optional mouse‑based horizontal movement for a gentle motion effect.
+- Subtle vertical drift and mouse‑based horizontal movement for gentle parallax.
 
 ### Lighting
-- A soft ambient light combined with a directional light for overall readability.
-- Lighting is kept simple to preserve text legibility and emphasize the surface shapes.
+- Soft ambient light combined with a directional light for readability.
+- Simple lighting to preserve text legibility and emphasize surface shape.
 
 ### Sphere
-- A static sphere mesh (the geometry itself does not spin).
-- The sphere uses a canvas‑generated texture containing:
+- Static sphere mesh (geometry does not spin).
+- A canvas‑generated texture provides:
   - A rectangular grid.
   - Letter columns drawn vertically in each grid cell.
   - Per‑column text offsets so columns differ but loop cleanly.
-- The texture scrolls vertically, creating the illusion of letters moving upward along the sphere.
-- The scroll speed has inertia:
-  - When the user clicks and holds, the scroll decelerates toward zero.
-  - Mouse drag produces velocity impulses; repeated drags add momentum.
-  - On release, the scroll speed eases back to the auto‑scroll target.
-  - This allows stacking impulses for a “push” effect and gradual return to baseline.
+- The texture scrolls vertically via UV offset, creating the illusion of letters moving upward.
+- Scroll speed has inertia:
+  - Pointer down brings base scroll toward zero.
+  - Dragging applies velocity impulses.
+  - On release, speed eases back to auto‑scroll.
 
 ### Spiral Plane
-- A large plane with a Gaussian‑style depression centered at the origin to mimic a sink.
-- The plane surface is a mesh with higher segmentation so the depression is smooth.
-- The plane material is dark by default, allowing text/lines to stand out.
-- A dedicated overlay mesh is used to render the spiral letters:
-  - The overlay uses a canvas texture updated every frame.
-  - The overlay is separate from the base plane material so the text can be animated without altering the base surface.
-- A spiral path is defined in polar space and the letters move along it from the edge toward the center.
+- A large plane with a Gaussian‑style depression centered at the origin.
+- The base plane mesh is highly segmented for a smooth sink.
+- The plane material is opaque and dark so spiral letters stand out.
+- Spiral letters are rendered as instanced quads with a custom `ShaderMaterial`:
+  - The shader computes spiral position, alpha fade, and orientation on the GPU.
+  - The letter quads are oriented toward the center and aligned to the curved surface.
 
 ## Spiral Text Behavior
-### Text Source
+### Text Source and Generator
 - Spiral letters are sourced from a long repeating text string (`LONG_TEXT`).
-- Characters are arranged along the spiral in sequence, with per‑letter displacement applied to the string order.
+- A generator yields characters sequentially; slots are refilled as letters wrap from the center to the edge.
 
 ### Displacement Model
-- Each character has two indices:
-  - Original index (the true order in the text).
-  - Displaced index (a shifted, randomized position in the string).
-- These two indices define two positions on the spiral path.
+- Each slot has two indices:
+  - Original index (true order in the text stream).
+  - Displaced index (randomized by a Gaussian offset).
+- These indices define two positions on the spiral.
 - The system blends between those positions:
-  - When the sphere is pressed and its scroll speed reaches near zero, after a delay the spiral letters move toward their original positions.
-  - On release, letters smoothly return to displaced positions.
-  - The transition is time‑based and reversible mid‑animation.
+  - While the pointer is held, after a delay the spiral transitions toward ordered positions.
+  - On release, it transitions back to displaced positions.
+  - Blending uses smoothstep easing (slow start, acceleration, slight slowdown near the end).
 
 ### Visual Flow
 - Spiral progression advances continuously, so letters always move along the spiral.
-- Alpha fades from transparent at the outer edge to fully opaque near the center.
-- The spiral appears dense and continuous due to a high letter count and multiple spiral turns.
+- Alpha fades from transparent at the edge to opaque near the center.
+- A high letter count and many spiral turns create density and continuity.
 
 ## Interaction Model
 ### Sphere Drag
-- Only activates on direct click of the sphere (raycast hit).
-- Holding the click reduces scroll speed to zero over a short time.
-- Dragging applies instantaneous velocity impulses to the scroll speed.
-- Releasing returns the scroll speed to auto‑scroll over a longer, smoother time.
+- Dragging only activates on raycast hit of the sphere.
+- Holding the click reduces scroll speed toward zero.
+- Dragging applies instantaneous velocity impulses.
+- Releasing returns scroll speed to auto‑scroll.
 
 ### Spiral Reaction to Sphere State
-- The spiral animation checks the sphere state:
-  - If the sphere is held and its scroll speed is near zero, a delay begins.
-  - After the delay, letters transition to their original (ordered) positions.
-  - Releasing immediately begins the transition back to displaced positions.
+- If the pointer is held, a delay begins; after the delay the spiral transitions to ordered positions.
+- On release, the spiral transitions back to displaced positions with smooth easing.
 
 ## Materials and Color Strategy
 - Base material parameters (roughness/metalness) are shared for consistency.
-- Sphere and plane colors can be separated for contrast (e.g., light spiral letters on a dark plane).
-- Spiral letters are rendered with a fixed color and alpha gradient for depth cues.
+- Sphere and plane colors are separated for contrast (light letters on dark plane).
+- Spiral letters use a fixed color and alpha gradient for depth cues.
 
 ## Performance Considerations
-- Canvas textures are high‑resolution and updated per frame.
-- The spiral overlay uses a separate mesh to avoid re‑creating geometry.
-- The sphere’s scrolling text is done purely via UV offset, which is efficient.
+- Sphere text is handled by UV offset (cheap per frame).
+- Spiral letters are instanced on the GPU; only per‑slot glyph indices update when wrapping.
+- The spiral texture is a single glyph atlas texture reused by all instances.
 
 ## Extensibility
 - The sphere controller is isolated and can be reused or swapped without touching main rendering logic.
-- The spiral plane is self‑contained and can be replaced with other patterns (grid, rings, etc.).
+- The spiral plane is self‑contained and can be replaced with other patterns.
 - Text source can be replaced by editing `text.ts`.
-- Interaction thresholds and timings are controlled by dedicated constants for easy tuning.
+- Interaction thresholds and timings are controlled by constants in `spiral.ts` and `sphere.ts`.

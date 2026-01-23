@@ -33,6 +33,15 @@ const SPHERE_COLUMN_COUNT = 32
 const SPHERE_ROW_COUNT = 20
 const SPHERE_TEXTURE_SIZE = 2048
 const SPHERE_TEXTURE_OFFSET = 1 / (SPHERE_COLUMN_COUNT * 2)
+// The front-facing UV for a sphere in three.js maps to u ≈ 0.75.
+const SPHERE_CENTER_U = 0.75
+const SPHERE_CENTRAL_COLUMN = Math.floor(
+    ((SPHERE_CENTER_U + SPHERE_TEXTURE_OFFSET) % 1) * SPHERE_COLUMN_COUNT
+)
+const SPHERE_GLOW_BLUR = 32
+const SPHERE_GLOW_ALPHA = 0.85
+const SPHERE_GLOW_COLOR = '#efefef'
+const SPHERE_GLOW_SCALE = 1.2
 
 // Scroll and inertia tuning for the sphere texture.
 const sphereTextureScrollSpeed = 0.04
@@ -96,6 +105,21 @@ function createSphereTexture(
             const char = LONG_TEXT[index]
             const cx = col * cellWidth + cellWidth / 2
             const cy = row * cellHeight + cellHeight / 2
+            if (col === Math.floor(SPHERE_COLUMN_COUNT / 4)) {
+                ctx.save()
+                ctx.globalAlpha = SPHERE_GLOW_ALPHA
+                ctx.shadowColor = SPHERE_GLOW_COLOR
+                ctx.shadowBlur = SPHERE_GLOW_BLUR
+                ctx.shadowOffsetX = 0
+                ctx.shadowOffsetY = 0
+                ctx.globalCompositeOperation = 'lighter'
+                ctx.fillStyle = SPHERE_GLOW_COLOR
+                ctx.font = `bold ${Math.round(40 * SPHERE_GLOW_SCALE)}px monospace`
+                ctx.fillText(char, cx, cy)
+                ctx.restore()
+            }
+            ctx.fillStyle = letterColor
+            ctx.font = 'bold 40px monospace'
             ctx.fillText(char, cx, cy)
         }
     }
