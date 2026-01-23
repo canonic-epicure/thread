@@ -1,5 +1,5 @@
 import * as THREE from 'three'
-import { LONG_TEXT } from './text'
+import { LONG_TEXT, TEXT } from './text'
 
 type SpiralControllerOptions = {
     renderer: THREE.WebGLRenderer
@@ -26,8 +26,8 @@ const DEPRESSION_RADIUS = 3.1
 const DEPRESSION_DEPTH = 15.4
 const DEPRESSION_FALLOFF = 18
 
-const SPIRAL_TURNS = 30
-const SPIRAL_FLOW_SPEED = 0.0005
+const SPIRAL_TURNS = 51
+const SPIRAL_FLOW_SPEED = 0.0003
 const SPIRAL_LETTER_COUNT = SPIRAL_TURNS * 91 + 15
 const SPIRAL_ALPHA_EDGE = 0
 const SPIRAL_ALPHA_CENTER = 1.0
@@ -42,18 +42,24 @@ type SpiralSlot = {
     originalIndex: number
     alteredIndex: number
     displacedIndex: number
-    originalBaseT: number
-    displacedBaseT: number
-    originalBaseCos: number
-    originalBaseSin: number
-    displacedBaseCos: number
-    displacedBaseSin: number
+}
+
+type GlyphAtlas = {
+    texture: THREE.CanvasTexture
+    glyphMap: Map<string, number>
+    columns: number
+    rows: number
 }
 
 const SPIRAL_TEXT_CHARS = Array.from(LONG_TEXT)
 const SPIRAL_STRING_OFFSET_RADIUS = 5
 const SPIRAL_OFFSET_RANGE = SPIRAL_STRING_OFFSET_RADIUS * 2 + 1
 const SPIRAL_OFFSET_STD_DEV = SPIRAL_STRING_OFFSET_RADIUS * 0.9
+
+const GLYPH_CELL_SIZE = 64
+const GLYPH_FONT_SIZE = 64
+const GLYPH_ATLAS_COLUMNS = 16
+const LETTER_SIZE = (PLANE_SIZE * 18) / 4096
 
 function* createSpiralCharGenerator(chars: string[]): Generator<string> {
     if (chars.length === 0) {
@@ -83,6 +89,47 @@ function sampleGaussianOffset(
     return Math.max(min, Math.min(max, value))
 }
 
+function createGlyphAtlas(chars: string[]): GlyphAtlas {
+    const uniqueChars = Array.from(new Set(chars))
+    if (!uniqueChars.includes(' ')) {
+        uniqueChars.push(' ')
+    }
+
+    const columns = GLYPH_ATLAS_COLUMNS
+    const rows = Math.ceil(uniqueChars.length / columns)
+    const canvas = document.createElement('canvas')
+    canvas.width = columns * GLYPH_CELL_SIZE
+    canvas.height = rows * GLYPH_CELL_SIZE
+    const ctx = canvas.getContext('2d')
+    if (!ctx) {
+        throw new Error('Failed to get glyph atlas context')
+    }
+
+    ctx.clearRect(0, 0, canvas.width, canvas.height)
+    ctx.fillStyle = 'white'
+    ctx.textAlign = 'center'
+    ctx.textBaseline = 'middle'
+    ctx.font = `bold ${GLYPH_FONT_SIZE}px monospace`
+
+    const glyphMap = new Map<string, number>()
+    uniqueChars.forEach((char, index) => {
+        const col = index % columns
+        const row = Math.floor(index / columns)
+        const cx = col * GLYPH_CELL_SIZE + GLYPH_CELL_SIZE / 2
+        const cy = row * GLYPH_CELL_SIZE + GLYPH_CELL_SIZE / 2
+        ctx.fillText(char, cx, cy)
+        glyphMap.set(char, index)
+    })
+
+    const texture = new THREE.CanvasTexture(canvas)
+    texture.minFilter = THREE.LinearFilter
+    texture.magFilter = THREE.LinearFilter
+    texture.generateMipmaps = false
+    texture.needsUpdate = true
+
+    return { texture, glyphMap, columns, rows }
+}
+
 function createSpiralSlots(generator: Generator<string>): SpiralSlot[] {
     return Array.from({ length: SPIRAL_LETTER_COUNT }, (_, index) => ({
         char: generator.next().value ?? ' ',
@@ -94,13 +141,7 @@ function createSpiralSlots(generator: Generator<string>): SpiralSlot[] {
                 -SPIRAL_STRING_OFFSET_RADIUS,
                 SPIRAL_STRING_OFFSET_RADIUS
             ),
-        displacedIndex: 0,
-        originalBaseT: 0,
-        displacedBaseT: 0,
-        originalBaseCos: 0,
-        originalBaseSin: 0,
-        displacedBaseCos: 0,
-        displacedBaseSin: 0
+        displacedIndex: 0
     }))
 }
 
@@ -110,24 +151,6 @@ function assignDisplacedIndices(slots: SpiralSlot[]): void {
         .sort((a, b) => a.alteredIndex - b.alteredIndex)
     displacedOrder.forEach((slot, index) => {
         slot.displacedIndex = index
-    })
-}
-
-function precomputeSpiralBases(slots: SpiralSlot[]): void {
-    const total = SPIRAL_LETTER_COUNT
-    const angleScale = SPIRAL_TURNS * Math.PI * 2
-
-    slots.forEach((slot) => {
-        slot.originalBaseT = slot.originalIndex / total
-        slot.displacedBaseT = slot.displacedIndex / total
-
-        const originalAngle = angleScale * slot.originalBaseT
-        slot.originalBaseCos = Math.cos(originalAngle)
-        slot.originalBaseSin = Math.sin(originalAngle)
-
-        const displacedAngle = angleScale * slot.displacedBaseT
-        slot.displacedBaseCos = Math.cos(displacedAngle)
-        slot.displacedBaseSin = Math.sin(displacedAngle)
     })
 }
 
@@ -158,7 +181,7 @@ function createDepressedPlane(
     const material = new THREE.MeshStandardMaterial({
         ...materialParams,
         color: planeColor,
-        transparent: true,
+        transparent: false,
         side: THREE.DoubleSide
     })
 
@@ -177,52 +200,205 @@ export function createSpiralController(options: SpiralControllerOptions): Spiral
     const spiralCharGenerator = createSpiralCharGenerator(SPIRAL_TEXT_CHARS)
     const spiralSlots = createSpiralSlots(spiralCharGenerator)
     assignDisplacedIndices(spiralSlots)
-    precomputeSpiralBases(spiralSlots)
 
-    const spiralCanvas = document.createElement('canvas')
-    spiralCanvas.width = 2048
-    spiralCanvas.height = 2048
-    const spiralCtx = spiralCanvas.getContext('2d')
-    if (!spiralCtx) {
-        throw new Error('Failed to get 2D context')
-    }
-
-    const spiralTexture = new THREE.CanvasTexture(spiralCanvas)
-    spiralTexture.anisotropy = Math.min(
+    const glyphAtlas = createGlyphAtlas(Array.from(TEXT))
+    glyphAtlas.texture.anisotropy = Math.min(
         8,
         options.renderer.capabilities.getMaxAnisotropy()
     )
-    spiralTexture.minFilter = THREE.LinearFilter
-    spiralTexture.magFilter = THREE.LinearFilter
-    spiralTexture.generateMipmaps = false
-    spiralTexture.needsUpdate = true
+    const total = SPIRAL_LETTER_COUNT
+    const originalTArray = new Float32Array(total)
+    const displacedTArray = new Float32Array(total)
+    const glyphUvArray = new Float32Array(total * 2)
+    const fallbackGlyph = glyphAtlas.glyphMap.get(' ') ?? 0
 
-    const spiralOverlay = new THREE.Mesh(
-        plane.geometry.clone(),
-        new THREE.MeshStandardMaterial({
-            map: spiralTexture,
-            transparent: true,
-            opacity: 1,
-            alphaTest: 0.25,
-            depthWrite: false,
-            ...options.materialParams,
-            color: options.letterColor
-        })
+    for (let i = 0; i < total; i += 1) {
+        const slot = spiralSlots[i]
+        originalTArray[i] = slot.originalIndex / total
+        displacedTArray[i] = slot.displacedIndex / total
+        const glyphIndex = glyphAtlas.glyphMap.get(slot.char) ?? fallbackGlyph
+        glyphUvArray[i * 2] = glyphIndex % glyphAtlas.columns
+        glyphUvArray[i * 2 + 1] = Math.floor(glyphIndex / glyphAtlas.columns)
+    }
+
+    const baseGeometry = new THREE.PlaneGeometry(1, 1)
+    const spiralGeometry = new THREE.InstancedBufferGeometry()
+    spiralGeometry.index = baseGeometry.index
+    spiralGeometry.attributes.position = baseGeometry.attributes.position
+    spiralGeometry.attributes.uv = baseGeometry.attributes.uv
+    spiralGeometry.instanceCount = total
+    spiralGeometry.setAttribute(
+        'aOriginalT',
+        new THREE.InstancedBufferAttribute(originalTArray, 1)
     )
+    spiralGeometry.setAttribute(
+        'aDisplacedT',
+        new THREE.InstancedBufferAttribute(displacedTArray, 1)
+    )
+    const glyphAttribute = new THREE.InstancedBufferAttribute(glyphUvArray, 2)
+    glyphAttribute.setUsage(THREE.DynamicDrawUsage)
+    spiralGeometry.setAttribute('aGlyphUv', glyphAttribute)
+
+    const spiralMaterial = new THREE.ShaderMaterial({
+        transparent: true,
+        depthTest: true,
+        depthWrite: false,
+        side: THREE.DoubleSide,
+        uniforms: {
+            uSpiralProgress: { value: 0 },
+            uBlend: { value: 0 },
+            uPlaneHalf: { value: half },
+            uRadialStep: { value: radialStep },
+            uSpiralTurns: { value: SPIRAL_TURNS },
+            uLetterSize: { value: LETTER_SIZE },
+            uDepressionRadius: { value: DEPRESSION_RADIUS },
+            uDepressionDepth: { value: DEPRESSION_DEPTH },
+            uDepressionFalloff: { value: DEPRESSION_FALLOFF },
+            uAtlas: { value: glyphAtlas.texture },
+            uAtlasGrid: { value: new THREE.Vector2(glyphAtlas.columns, glyphAtlas.rows) },
+            uLetterColor: { value: new THREE.Color(options.letterColor) },
+            uAlphaEdge: { value: SPIRAL_ALPHA_EDGE },
+            uAlphaCenter: { value: SPIRAL_ALPHA_CENTER },
+            uDebugSolid: { value: 0 }
+        },
+        vertexShader: `
+            attribute float aOriginalT;
+            attribute float aDisplacedT;
+            attribute vec2 aGlyphUv;
+
+            uniform float uSpiralProgress;
+            uniform float uBlend;
+            uniform float uPlaneHalf;
+            uniform float uRadialStep;
+            uniform float uSpiralTurns;
+            uniform float uLetterSize;
+            uniform float uDepressionRadius;
+            uniform float uDepressionDepth;
+            uniform float uDepressionFalloff;
+            uniform float uAlphaEdge;
+            uniform float uAlphaCenter;
+            uniform float uDebugSolid;
+
+            varying vec2 vUv;
+            varying vec2 vGlyphUv;
+            varying float vEdgeAlpha;
+
+            const float PI = 3.141592653589793;
+
+            float planeHeight(vec2 pos) {
+                float r = length(pos);
+                if (r > uDepressionRadius) {
+                    return 0.0;
+                }
+                float rNorm = r / uDepressionRadius;
+                return -uDepressionDepth * exp(-uDepressionFalloff * rNorm * rNorm);
+            }
+
+            vec3 planeNormal(vec2 pos) {
+                float r = length(pos);
+                if (r < 0.0001 || r > uDepressionRadius) {
+                    return vec3(0.0, 0.0, 1.0);
+                }
+                float rNorm = r / uDepressionRadius;
+                float expTerm = exp(-uDepressionFalloff * rNorm * rNorm);
+                float dhdr = uDepressionDepth * expTerm * (2.0 * uDepressionFalloff * r) /
+                    (uDepressionRadius * uDepressionRadius);
+                vec2 grad = (pos / r) * dhdr;
+                return normalize(vec3(-grad.x, -grad.y, 1.0));
+            }
+
+            void main() {
+                if (uDebugSolid > 1.5) {
+                    vec2 pos = vec2(0.0);
+                    vec2 quad = position.xy * uLetterSize * 20.0;
+                    vec3 finalPos = vec3(pos + quad, 0.05);
+                    vEdgeAlpha = 1.0;
+                    vUv = uv;
+                    vGlyphUv = aGlyphUv;
+                    gl_Position = projectionMatrix * modelViewMatrix * vec4(finalPos, 1.0);
+                    return;
+                }
+
+                float tOriginal = aOriginalT + uSpiralProgress;
+                tOriginal = tOriginal - floor(tOriginal);
+                float tDisplaced = aDisplacedT + uSpiralProgress;
+                tDisplaced = tDisplaced - floor(tDisplaced);
+
+                float radiusOriginal = uPlaneHalf - tOriginal * uRadialStep;
+                float angleOriginal = uSpiralTurns * 2.0 * PI * tOriginal;
+                vec2 originalPos = vec2(cos(angleOriginal), sin(angleOriginal)) * radiusOriginal;
+
+                float radiusDisplaced = uPlaneHalf - tDisplaced * uRadialStep;
+                float angleDisplaced = uSpiralTurns * 2.0 * PI * tDisplaced;
+                vec2 displacedPos = vec2(cos(angleDisplaced), sin(angleDisplaced)) * radiusDisplaced;
+
+                vec2 pos = mix(displacedPos, originalPos, uBlend);
+
+                vec2 quad = position.xy * uLetterSize;
+                vec3 normal = planeNormal(pos);
+                vec3 inward = vec3(-pos, 0.0);
+                vec3 inwardTangent = inward - normal * dot(inward, normal);
+                if (length(inwardTangent) < 0.0001) {
+                    inwardTangent = vec3(0.0, 1.0, 0.0);
+                } else {
+                    inwardTangent = normalize(inwardTangent);
+                }
+                vec3 rightTangent = normalize(cross(inwardTangent, normal));
+                vec3 offset = rightTangent * quad.x + inwardTangent * quad.y;
+
+                float z = planeHeight(pos) + 0.01;
+                vec3 finalPos = vec3(pos, z) + offset;
+
+                float edgeT = clamp(length(pos) / uPlaneHalf, 0.0, 1.0);
+                vEdgeAlpha = mix(uAlphaCenter, uAlphaEdge, edgeT);
+                vUv = uv;
+                vGlyphUv = aGlyphUv;
+
+                gl_Position = projectionMatrix * modelViewMatrix * vec4(finalPos, 1.0);
+            }
+        `,
+        fragmentShader: `
+            uniform sampler2D uAtlas;
+            uniform vec2 uAtlasGrid;
+            uniform vec3 uLetterColor;
+            uniform float uDebugSolid;
+
+            varying vec2 vUv;
+            varying vec2 vGlyphUv;
+            varying float vEdgeAlpha;
+
+            void main() {
+                float flippedRow = (uAtlasGrid.y - 1.0) - vGlyphUv.y;
+                vec2 atlasUv = vec2(
+                    (vGlyphUv.x + vUv.x) / uAtlasGrid.x,
+                    (flippedRow + vUv.y) / uAtlasGrid.y
+                );
+                if (uDebugSolid > 0.5) {
+                    gl_FragColor = vec4(uLetterColor, 1.0);
+                    return;
+                }
+
+                vec4 glyphSample = texture2D(uAtlas, atlasUv);
+                float glyphAlpha = max(glyphSample.a, glyphSample.r);
+                float alpha = glyphAlpha * vEdgeAlpha;
+                if (alpha < 0.01) {
+                    discard;
+                }
+                gl_FragColor = vec4(uLetterColor, alpha);
+            }
+        `
+    })
+
+    const spiralOverlay = new THREE.Mesh(spiralGeometry, spiralMaterial)
     spiralOverlay.renderOrder = 2
+    spiralOverlay.frustumCulled = false
     plane.add(spiralOverlay)
 
     let spiralProgress = 0
 
-    const letterColor = new THREE.Color(options.letterColor)
-    const letterRgb = {
-        r: Math.round(letterColor.r * 255),
-        g: Math.round(letterColor.g * 255),
-        b: Math.round(letterColor.b * 255)
-    }
-
     let blend = 0
     let blendTarget = 0
+    let blendProgress = 0
     let returnDelayRemaining = SPIRAL_RETURN_DELAY
     let lastProgressIndex = 0
 
@@ -232,6 +408,7 @@ export function createSpiralController(options: SpiralControllerOptions): Spiral
     ) => {
         spiralProgress = (spiralProgress + SPIRAL_FLOW_SPEED * delta) % 1
         const progressIndex = Math.floor(spiralProgress * SPIRAL_LETTER_COUNT)
+        let glyphsUpdated = false
         if (progressIndex !== lastProgressIndex) {
             const steps =
                 (progressIndex - lastProgressIndex + SPIRAL_LETTER_COUNT) %
@@ -242,87 +419,45 @@ export function createSpiralController(options: SpiralControllerOptions): Spiral
                 const slotIndex =
                     (SPIRAL_LETTER_COUNT - lastProgressIndex) %
                     SPIRAL_LETTER_COUNT
-                spiralSlots[slotIndex].char =
-                    spiralCharGenerator.next().value ?? ' '
+                const nextChar = spiralCharGenerator.next().value ?? ' '
+                spiralSlots[slotIndex].char = nextChar
+                const glyphIndex =
+                    glyphAtlas.glyphMap.get(nextChar) ?? fallbackGlyph
+                glyphUvArray[slotIndex * 2] = glyphIndex % glyphAtlas.columns
+                glyphUvArray[slotIndex * 2 + 1] = Math.floor(
+                    glyphIndex / glyphAtlas.columns
+                )
+                glyphsUpdated = true
             }
         }
 
-        spiralCtx.clearRect(0, 0, spiralCanvas.width, spiralCanvas.height)
-
-        spiralCtx.imageSmoothingEnabled = false
-        spiralCtx.textAlign = 'center'
-        spiralCtx.textBaseline = 'middle'
-        spiralCtx.font = 'bold 18px monospace'
-
-        if (sphereState.isPointerDown) {
+        const isStopped = Math.abs(sphereState.scrollSpeed) <= SPIRAL_STOP_THRESHOLD
+        if (sphereState.isPointerDown && isStopped) {
             returnDelayRemaining = Math.max(0, returnDelayRemaining - delta)
-            if (returnDelayRemaining === 0) {
-                blendTarget = 1
-            }
+            blendTarget = returnDelayRemaining === 0 ? 1 : 0
         } else {
             returnDelayRemaining = SPIRAL_RETURN_DELAY
             blendTarget = 0
         }
 
         const duration = blendTarget === 1 ? SPIRAL_RETURN_DURATION : SPIRAL_RELEASE_DURATION
-        const smoothing = 1 - Math.exp(-delta / duration)
-        blend += (blendTarget - blend) * smoothing
-
-        const angleDelta = SPIRAL_TURNS * Math.PI * 2 * spiralProgress
-        const cosDelta = Math.cos(angleDelta)
-        const sinDelta = Math.sin(angleDelta)
-
-        for (let i = 0; i < SPIRAL_LETTER_COUNT; i += 1) {
-            const entry = spiralSlots[i]
-            let tOriginal = entry.originalBaseT + spiralProgress
-            if (tOriginal >= 1) {
-                tOriginal -= 1
-            }
-            let tDisplaced = entry.displacedBaseT + spiralProgress
-            if (tDisplaced >= 1) {
-                tDisplaced -= 1
-            }
-
-            const radiusOriginal = half - tOriginal * radialStep
-            const cosOriginal =
-                entry.originalBaseCos * cosDelta - entry.originalBaseSin * sinDelta
-            const sinOriginal =
-                entry.originalBaseSin * cosDelta + entry.originalBaseCos * sinDelta
-            const xOriginal = radiusOriginal * cosOriginal
-            const yOriginal = radiusOriginal * sinOriginal
-
-            const radiusDisplaced = half - tDisplaced * radialStep
-            const cosDisplaced =
-                entry.displacedBaseCos * cosDelta - entry.displacedBaseSin * sinDelta
-            const sinDisplaced =
-                entry.displacedBaseSin * cosDelta + entry.displacedBaseCos * sinDelta
-            const xDisplaced = radiusDisplaced * cosDisplaced
-            const yDisplaced = radiusDisplaced * sinDisplaced
-
-            const x = xDisplaced + (xOriginal - xDisplaced) * blend
-            const y = yDisplaced + (yOriginal - yDisplaced) * blend
-
-            const u = (x + half) / PLANE_SIZE
-            const v = (y + half) / PLANE_SIZE
-            const px = u * spiralCanvas.width
-            const py = (1 - v) * spiralCanvas.height
-
-            const char = entry.char
-            const edgeT = Math.min(1, Math.max(0, Math.hypot(x, y) / half))
-
-            const alpha =
-                SPIRAL_ALPHA_EDGE +
-                (1 - edgeT) * (SPIRAL_ALPHA_CENTER - SPIRAL_ALPHA_EDGE)
-
-            spiralCtx.fillStyle = `rgba(${letterRgb.r}, ${letterRgb.g}, ${letterRgb.b}, ${alpha})`
-            spiralCtx.save()
-            spiralCtx.translate(px, py)
-            spiralCtx.rotate(Math.atan2(y, -x) + Math.PI / 2)
-            spiralCtx.fillText(char, 0, 0)
-            spiralCtx.restore()
+        const step = duration > 0 ? delta / duration : 1
+        if (blendTarget === 1) {
+            blendProgress = Math.min(1, blendProgress + step)
+        } else {
+            blendProgress = Math.max(0, blendProgress - step)
         }
 
-        spiralTexture.needsUpdate = true
+        const t = blendProgress
+        const eased = t * t * (3 - 2 * t)
+        blend = blendTarget === 1 ? eased : eased
+
+        if (glyphsUpdated) {
+            glyphAttribute.needsUpdate = true
+        }
+
+        spiralMaterial.uniforms.uSpiralProgress.value = spiralProgress
+        spiralMaterial.uniforms.uBlend.value = blend
     }
 
     return { spiralPlane: plane, updateSpiral }
