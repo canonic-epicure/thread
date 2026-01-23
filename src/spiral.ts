@@ -52,9 +52,9 @@ type GlyphAtlas = {
 }
 
 const SPIRAL_TEXT_CHARS = Array.from(LONG_TEXT)
-const SPIRAL_STRING_OFFSET_RADIUS = 5
+const SPIRAL_STRING_OFFSET_RADIUS = 15
 const SPIRAL_OFFSET_RANGE = SPIRAL_STRING_OFFSET_RADIUS * 2 + 1
-const SPIRAL_OFFSET_STD_DEV = SPIRAL_STRING_OFFSET_RADIUS * 0.9
+const SPIRAL_OFFSET_STD_DEV = SPIRAL_STRING_OFFSET_RADIUS * 0.6
 
 const GLYPH_CELL_SIZE = 64
 const GLYPH_FONT_SIZE = 64
@@ -432,7 +432,7 @@ export function createSpiralController(options: SpiralControllerOptions): Spiral
         }
 
         const isStopped = Math.abs(sphereState.scrollSpeed) <= SPIRAL_STOP_THRESHOLD
-        if (sphereState.isPointerDown && isStopped) {
+        if (sphereState.isPointerDown) {
             returnDelayRemaining = Math.max(0, returnDelayRemaining - delta)
             blendTarget = returnDelayRemaining === 0 ? 1 : 0
         } else {
