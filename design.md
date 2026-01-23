@@ -111,6 +111,18 @@ This project renders a single Three.js WebGL scene with a text‑mapped sphere a
   - Spiral plane color.
   - Spiral letter color.
 
+## Music / SoundCloud Behavior
+- Sound is provided by a hidden SoundCloud widget iframe created in `sound.ts`.
+- The iframe is kept offscreen/hidden via CSS, while a single toggle button is shown.
+- The toggle button is the only visible UI element for audio control.
+- Clicking the button toggles play/pause using the SoundCloud Widget API.
+- The button icon switches between "sound off" and "sound on" states; `aria-pressed`
+  and `aria-label` update accordingly for accessibility.
+- Autoplay is disabled in the iframe URL; playback begins only after user action.
+- When the widget first starts playing, a one‑time seek is applied if `startMs > 0`.
+- The seek is bound on the first `PLAY` event to avoid fighting autoplay restrictions.
+- If the widget API fails to load, the scene still renders; the audio control becomes inert.
+
 ## Materials and Color Strategy
 - Base material parameters (roughness/metalness) are shared for consistency.
 - Sphere base color is independent from the letter texture.

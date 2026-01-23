@@ -10,6 +10,7 @@ type SpiralControllerOptions = {
     }
     planeColor: number
     letterColor: number
+    fontFamily: string
 }
 
 type SpiralController = {
@@ -20,6 +21,7 @@ type SpiralController = {
     ) => void
     setSpiralPlaneColor: (color: string | number) => void
     setSpiralLetterColor: (color: string | number) => void
+    setSpiralFont: (fontFamily: string) => void
 }
 
 const PLANE_SIZE = 15
@@ -141,7 +143,7 @@ function sampleGaussianOffset(
     return Math.max(min, Math.min(max, value))
 }
 
-function createGlyphAtlas(chars: string[]): GlyphAtlas {
+function createGlyphAtlas(chars: string[], fontFamily: string): GlyphAtlas {
     const uniqueChars = Array.from(new Set(chars))
     if (!uniqueChars.includes(' ')) {
         uniqueChars.push(' ')
@@ -161,7 +163,7 @@ function createGlyphAtlas(chars: string[]): GlyphAtlas {
     ctx.fillStyle = 'white'
     ctx.textAlign = 'center'
     ctx.textBaseline = 'middle'
-    ctx.font = `bold ${GLYPH_FONT_SIZE}px monospace`
+    ctx.font = `bold ${GLYPH_FONT_SIZE}px ${fontFamily}`
 
     const glyphMap = new Map<string, number>()
     uniqueChars.forEach((char, index) => {
@@ -443,7 +445,8 @@ export function createSpiralController(options: SpiralControllerOptions): Spiral
     const spiralSlots = createSpiralSlots(spiralCharGenerator)
     assignDisplacedIndices(spiralSlots)
 
-    const glyphAtlas = createGlyphAtlas(Array.from(TEXT))
+    let currentFontFamily = options.fontFamily
+    let glyphAtlas = createGlyphAtlas(Array.from(TEXT), currentFontFamily)
     glyphAtlas.texture.anisotropy = Math.min(
         8,
         options.renderer.capabilities.getMaxAnisotropy()
@@ -452,7 +455,7 @@ export function createSpiralController(options: SpiralControllerOptions): Spiral
     const originalTArray = new Float32Array(total)
     const displacedTArray = new Float32Array(total)
     const glyphUvArray = new Float32Array(total * 2)
-    const fallbackGlyph = glyphAtlas.glyphMap.get(' ') ?? 0
+    let fallbackGlyph = glyphAtlas.glyphMap.get(' ') ?? 0
 
     for (let i = 0; i < total; i += 1) {
         const slot = spiralSlots[i]
@@ -712,6 +715,29 @@ export function createSpiralController(options: SpiralControllerOptions): Spiral
     const lensRadiusUniform = spiralMaterial.uniforms.uLensRadius.value as number[]
     const lensStrengthUniform = spiralMaterial.uniforms.uLensStrength.value as number[]
 
+    const rebuildGlyphAtlas = () => {
+        const nextAtlas = createGlyphAtlas(Array.from(TEXT), currentFontFamily)
+        nextAtlas.texture.anisotropy = Math.min(
+            8,
+            options.renderer.capabilities.getMaxAnisotropy()
+        )
+        glyphAtlas.texture.dispose()
+        glyphAtlas = nextAtlas
+        fallbackGlyph = glyphAtlas.glyphMap.get(' ') ?? 0
+        spiralMaterial.uniforms.uAtlas.value = glyphAtlas.texture
+        spiralMaterial.uniforms.uAtlasGrid.value.set(
+            glyphAtlas.columns,
+            glyphAtlas.rows
+        )
+        for (let i = 0; i < total; i += 1) {
+            const slot = spiralSlots[i]
+            const glyphIndex = glyphAtlas.glyphMap.get(slot.char) ?? fallbackGlyph
+            glyphUvArray[i * 2] = glyphIndex % glyphAtlas.columns
+            glyphUvArray[i * 2 + 1] = Math.floor(glyphIndex / glyphAtlas.columns)
+        }
+        glyphAttribute.needsUpdate = true
+    }
+
     const updateSpiral = (
         delta: number,
         sphereState: { isPointerDown: boolean; scrollSpeed: number }
@@ -810,6 +836,10 @@ export function createSpiralController(options: SpiralControllerOptions): Spiral
         },
         setSpiralLetterColor: (color: string | number) => {
             spiralMaterial.uniforms.uLetterColor.value.set(color)
+        },
+        setSpiralFont: (fontFamily: string) => {
+            currentFontFamily = fontFamily
+            rebuildGlyphAtlas()
         }
     }
 }

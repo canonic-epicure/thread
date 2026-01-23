@@ -24,7 +24,6 @@ renderer.setSize(window.innerWidth, window.innerHeight)
 app.appendChild(renderer.domElement)
 
 const scene = new THREE.Scene()
-scene.background = new THREE.Color(0x1e1e1e)
 
 const noiseShader = {
     uniforms: {
@@ -106,10 +105,14 @@ scene.add(ambient, directional)
 
 const letterFillAlpha = 0.75
 const colorState = {
-    sphereColor: '#b66363',
+    background: '#565656',
+    sphereColor: '#7d7d7d',
     sphereLetters: '#ffffff',
-    spiralPlane: '#5d7a89',
+    spiralPlane: '#687a82',
     spiralLetters: '#ffffff'
+}
+const typographyState = {
+    fontFamily: 'Roboto'
 }
 const toRgba = (hex : string, alpha : number) => {
     const color = new THREE.Color(hex)
@@ -118,6 +121,7 @@ const toRgba = (hex : string, alpha : number) => {
     const b = Math.round(color.b * 255)
     return `rgba(${ r },${ g },${ b },${ alpha })`
 }
+scene.background = new THREE.Color(colorState.background)
 const letterColor = toRgba(colorState.sphereLetters, letterFillAlpha)
 const gridColor = toRgba(colorState.sphereLetters, letterFillAlpha)
 
@@ -134,13 +138,14 @@ const baseMaterialParams = {
     metalness: sharedSurface.metalness
 }
 
-const { sphere, updateSphere, getSphereState, setSphereColor, setSphereLetterColor } =
+const { sphere, updateSphere, getSphereState, setSphereColor, setSphereLetterColor, setSphereFont } =
     createSphereController({
         renderer,
         camera,
         materialParams: baseMaterialParams,
         letterColor,
-        gridColor
+        gridColor,
+        fontFamily: typographyState.fontFamily
     })
 scene.add(sphere)
 setSphereColor(colorState.sphereColor)
@@ -149,12 +154,14 @@ const {
     spiralPlane,
     updateSpiral,
     setSpiralPlaneColor,
-    setSpiralLetterColor
+    setSpiralLetterColor,
+    setSpiralFont
 } = createSpiralController({
     renderer,
     materialParams: baseMaterialParams,
     planeColor: Number.parseInt(colorState.spiralPlane.replace('#', ''), 16),
-    letterColor: Number.parseInt(colorState.spiralLetters.replace('#', ''), 16)
+    letterColor: Number.parseInt(colorState.spiralLetters.replace('#', ''), 16),
+    fontFamily: typographyState.fontFamily
 })
 scene.add(spiralPlane)
 
@@ -165,6 +172,12 @@ composer.addPass(noisePass)
 
 const gui = new GUI({ title: 'Inspector' })
 const colorFolder = gui.addFolder('Colors')
+colorFolder
+    .addColor(colorState, 'background')
+    .name('Background')
+    .onChange((value : string) => {
+        scene.background = new THREE.Color(value)
+    })
 colorFolder
     .addColor(colorState, 'sphereColor')
     .name('Sphere')
@@ -184,6 +197,21 @@ colorFolder
     .name('Spiral Letters')
     .onChange((value : string) => setSpiralLetterColor(value))
 colorFolder.open()
+const typographyFolder = gui.addFolder('Typography')
+typographyFolder
+    .add(typographyState, 'fontFamily', ['monospace', 'Roboto'])
+    .name('Font')
+    .onChange((value : string) => {
+        if (document.fonts) {
+            document.fonts.load(`700 40px ${value}`).finally(() => {
+                setSphereFont(value)
+                setSpiralFont(value)
+            })
+            return
+        }
+        setSphereFont(value)
+        setSpiralFont(value)
+    })
 const noiseFolder = gui.addFolder('Noise')
 noiseFolder
     .add(noisePass.uniforms.uAmount, 'value', 0, 0.4, 0.0025)

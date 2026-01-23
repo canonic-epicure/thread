@@ -20,6 +20,7 @@ type SphereControllerOptions = {
     }
     letterColor: string
     gridColor: string
+    fontFamily: string
 }
 
 type SphereController = {
@@ -28,6 +29,7 @@ type SphereController = {
     getSphereState: () => { isPointerDown: boolean; scrollSpeed: number }
     setSphereColor: (color: string | number) => void
     setSphereLetterColor: (letterColor: string, gridColor?: string) => void
+    setSphereFont: (fontFamily: string) => void
 }
 
 // Grid layout for the sphere texture (rectangular cells wrapped onto the sphere).
@@ -59,7 +61,8 @@ const sphereResumeTime = 2.0
 function createSphereTexture(
     renderer: THREE.WebGLRenderer,
     letterColor: string,
-    gridColor: string
+    gridColor: string,
+    fontFamily: string
 ): THREE.CanvasTexture {
     const size = SPHERE_TEXTURE_SIZE
     const canvas = document.createElement('canvas')
@@ -95,7 +98,7 @@ function createSphereTexture(
     ctx.fillStyle = letterColor
     ctx.textAlign = 'center'
     ctx.textBaseline = 'middle'
-    ctx.font = 'bold 40px monospace'
+    ctx.font = `bold 40px ${fontFamily}`
 
     for (let col = 0; col < SPHERE_COLUMN_COUNT; col += 1) {
         // Column-based offset creates a vertical "text stream" per column.
@@ -114,12 +117,12 @@ function createSphereTexture(
                 ctx.shadowOffsetY = 0
                 ctx.globalCompositeOperation = 'lighter'
                 ctx.fillStyle = SPHERE_GLOW_COLOR
-                ctx.font = `bold ${Math.round(40 * SPHERE_GLOW_SCALE)}px monospace`
+                ctx.font = `bold ${Math.round(40 * SPHERE_GLOW_SCALE)}px ${fontFamily}`
                 ctx.fillText(char, cx, cy)
                 ctx.restore()
             }
             ctx.fillStyle = letterColor
-            ctx.font = 'bold 40px monospace'
+            ctx.font = `bold 40px ${fontFamily}`
             ctx.fillText(char, cx, cy)
         }
     }
@@ -131,10 +134,16 @@ function createSphereTexture(
 }
 
 export function createSphereController(options: SphereControllerOptions): SphereController {
-    const { renderer, camera, materialParams, letterColor, gridColor } = options
+    const { renderer, camera, materialParams, letterColor, gridColor, fontFamily } = options
     let currentLetterColor = letterColor
     let currentGridColor = gridColor
-    let texture = createSphereTexture(renderer, currentLetterColor, currentGridColor)
+    let currentFontFamily = fontFamily
+    let texture = createSphereTexture(
+        renderer,
+        currentLetterColor,
+        currentGridColor,
+        currentFontFamily
+    )
     // Repeat wrapping allows endless vertical scrolling on the sphere.
     texture.wrapS = THREE.RepeatWrapping
     texture.wrapT = THREE.RepeatWrapping
@@ -163,7 +172,12 @@ export function createSphereController(options: SphereControllerOptions): Sphere
     sphere.add(baseSphere, textSphere)
 
     const rebuildTexture = () => {
-        const nextTexture = createSphereTexture(renderer, currentLetterColor, currentGridColor)
+        const nextTexture = createSphereTexture(
+            renderer,
+            currentLetterColor,
+            currentGridColor,
+            currentFontFamily
+        )
         nextTexture.wrapS = THREE.RepeatWrapping
         nextTexture.wrapT = THREE.RepeatWrapping
         nextTexture.repeat.set(1, 1)
@@ -276,6 +290,10 @@ export function createSphereController(options: SphereControllerOptions): Sphere
         setSphereLetterColor: (nextLetterColor: string, nextGridColor?: string) => {
             currentLetterColor = nextLetterColor
             currentGridColor = nextGridColor ?? nextLetterColor
+            rebuildTexture()
+        },
+        setSphereFont: (nextFontFamily: string) => {
+            currentFontFamily = nextFontFamily
             rebuildTexture()
         }
     }
