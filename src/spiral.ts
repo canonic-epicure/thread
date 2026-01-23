@@ -39,7 +39,7 @@ const SPIRAL_RETURN_DURATION = 7
 const SPIRAL_RELEASE_DURATION = 7
 const SPIRAL_STOP_THRESHOLD = 0.01
 
-const PLANE_PARTICLE_COUNT = 80
+const PLANE_PARTICLE_COUNT = 30
 const PLANE_PARTICLE_SPEED_MIN = 0.6
 const PLANE_PARTICLE_SPEED_MAX = 1.6
 const PLANE_PARTICLE_LIFE_MIN = 0.35
@@ -305,7 +305,7 @@ function createPlaneParticles(half: number): {
     const material = new THREE.ShaderMaterial({
         transparent: true,
         depthWrite: false,
-        depthTest: false,
+        depthTest: true,
         blending: THREE.AdditiveBlending,
         uniforms: {
             uColor: { value: new THREE.Color(0.85, 0.92, 1.0) }
@@ -344,7 +344,7 @@ function createPlaneParticles(half: number): {
 
     const mesh = new THREE.Mesh(geometry, material)
     mesh.frustumCulled = false
-    mesh.renderOrder = 6
+    mesh.renderOrder = 1
 
     const spawnParticle = (particle: PlaneParticle) => {
         const range = half - PLANE_PARTICLE_EDGE_PADDING

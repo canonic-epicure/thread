@@ -24,7 +24,7 @@ const noiseShader = {
     uniforms: {
         tDiffuse: { value: null },
         uTime: { value: 0 },
-        uAmount: { value: 0.1125 },
+        uAmount: { value: 0.061125 },
         uScale: { value: 2.8 },
         uSpeed: { value: 0.12 }
     },
