@@ -46,10 +46,13 @@ const PLANE_PARTICLE_SPEED_MIN = 0.6
 const PLANE_PARTICLE_SPEED_MAX = 1.6
 const PLANE_PARTICLE_LIFE_MIN = 0.35
 const PLANE_PARTICLE_LIFE_MAX = 1.35
-const PLANE_PARTICLE_TRAIL_SECONDS = 0.08
+const PLANE_PARTICLE_TRAIL_SECONDS = 0.1
 const PLANE_PARTICLE_EDGE_PADDING = 0.1
-const PLANE_PARTICLE_HEIGHT_OFFSET = 0.003
+const PLANE_PARTICLE_HEIGHT_OFFSET = 0.00
 const PLANE_PARTICLE_WIDTH = 0.01
+const PLANE_PARTICLE_THICKNESS = 0.03
+const PLANE_PARTICLE_SURFACE_OFFSET = 0.002
+const PLANE_PARTICLE_HEAD_LENGTH = 0.35
 
 const PLANE_FADE_RESOLUTION = 512
 const PLANE_FADE_INNER = 0.12
@@ -288,7 +291,7 @@ function createPlaneParticles(half: number): {
     update: (delta: number) => void
 } {
     const particles: PlaneParticle[] = []
-    const baseQuad = new THREE.PlaneGeometry(1, 1)
+    const baseQuad = new THREE.BoxGeometry(1, 1, 1)
     const geometry = new THREE.InstancedBufferGeometry()
     geometry.index = baseQuad.index
     geometry.attributes.position = baseQuad.attributes.position
@@ -310,7 +313,10 @@ function createPlaneParticles(half: number): {
         depthTest: true,
         blending: THREE.AdditiveBlending,
         uniforms: {
-            uColor: { value: new THREE.Color(0.85, 0.92, 1.0) }
+            uColor: { value: new THREE.Color(0.85, 0.92, 1.0) },
+            uThickness: { value: PLANE_PARTICLE_THICKNESS },
+            uSurfaceOffset: { value: PLANE_PARTICLE_SURFACE_OFFSET },
+            uHeadLength: { value: PLANE_PARTICLE_HEAD_LENGTH }
         },
         vertexShader: `
             attribute vec3 aTail;
@@ -318,6 +324,9 @@ function createPlaneParticles(half: number): {
             attribute vec2 aAlpha;
             attribute float aWidth;
             uniform vec3 uColor;
+            uniform float uThickness;
+            uniform float uSurfaceOffset;
+            uniform float uHeadLength;
             varying vec4 vColor;
 
             void main() {
@@ -325,10 +334,18 @@ function createPlaneParticles(half: number): {
                 float len = length(dir);
                 vec3 dirNorm = len > 0.0001 ? dir / len : vec3(1.0, 0.0, 0.0);
                 vec3 right = normalize(cross(vec3(0.0, 0.0, 1.0), dirNorm));
+                vec3 up = vec3(0.0, 0.0, 1.0);
                 vec3 center = (aHead + aTail) * 0.5;
-                vec3 offset = dirNorm * (position.x * len) + right * (position.y * aWidth);
+                float heightOffset = (position.z * uThickness) - (0.5 * uThickness) + uSurfaceOffset;
+                vec3 offset =
+                    dirNorm * (position.x * len) +
+                    right * (position.y * aWidth) +
+                    up * heightOffset;
                 float t = position.x + 0.5;
-                float alpha = mix(aAlpha.x, aAlpha.y, t);
+                float headT = clamp(uHeadLength, 0.0, 1.0);
+                float alpha = t >= (1.0 - headT)
+                    ? aAlpha.y
+                    : mix(aAlpha.x, aAlpha.y, t / max(0.0001, 1.0 - headT));
                 vColor = vec4(uColor, alpha);
                 gl_Position = projectionMatrix * modelViewMatrix * vec4(center + offset, 1.0);
             }

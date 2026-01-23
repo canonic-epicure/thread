@@ -14,7 +14,8 @@ This project renders a single Three.js WebGL scene with a text‑mapped sphere a
 ## Scene Composition
 ### Camera
 - Perspective camera positioned forward on the Z axis, aimed at the origin.
-- Subtle vertical drift and mouse‑based horizontal movement for gentle parallax.
+- Subtle vertical drift plus mouse‑based horizontal and vertical movement for gentle parallax.
+- Vertical movement is clamped so the camera never dips below the spiral plane.
 
 ### Lighting
 - Soft ambient light combined with a directional light for readability.
@@ -23,7 +24,7 @@ This project renders a single Three.js WebGL scene with a text‑mapped sphere a
 ### Sphere
 - The sphere is composed of two meshes:
   - Base mesh: solid `MeshStandardMaterial` whose color is adjustable by the inspector.
-  - Text mesh: transparent `MeshStandardMaterial` that carries the letter texture and floats slightly above the base.
+  - Text mesh: transparent material that carries the letter texture and floats slightly above the base.
 - The text texture is generated via a 2D canvas:
   - A rectangular grid is drawn across the texture.
   - Letter columns are drawn vertically in each grid cell.
@@ -34,6 +35,7 @@ This project renders a single Three.js WebGL scene with a text‑mapped sphere a
   - Pointer down brings base scroll toward zero.
   - Dragging applies velocity impulses.
   - On release, speed eases back to auto‑scroll.
+- The sphere text texture respects the active font setting (see Typography).
 
 ### Spiral Plane
 - A large plane with a Gaussian‑style depression centered at the origin.
@@ -45,24 +47,26 @@ This project renders a single Three.js WebGL scene with a text‑mapped sphere a
 - Spiral letters are rendered as instanced quads with a custom `ShaderMaterial`:
   - The shader computes spiral position, alpha fade, and orientation on the GPU.
   - Each quad is oriented toward the center and aligned to the curved surface normal.
-- A glyph atlas is built once on a canvas and used for all instances.
-- Only glyph indices update when slots wrap (cheap per frame).
+- A glyph atlas is built on a canvas and used for all instances.
+- The atlas can be rebuilt when the font changes; only glyph indices update when slots wrap (cheap per frame).
 
 ### Plane Particles
 - Short “streak” particles move across the plane surface:
-  - Each particle is a tiny ribbon quad rendered via instancing.
+  - Each particle is an instanced box with a small 3D thickness (not a flat quad).
   - A head/tail segment is updated per frame to form a short afterglow.
+  - The head includes a short fully opaque segment before the tail fades out.
   - Particles respawn when they expire or drift outside the bounds.
 - Particle positions follow the depressed plane height so they hug the surface.
+- Depth testing is enabled so particles are occluded by the sphere.
 
 ### Plane Lens Distortion
 - A set of moving “lens” particles distort the spiral letter positions:
   - Each lens has a position, radius, and strength.
   - The spiral vertex shader pushes letter positions radially when they fall inside a lens.
   - This produces a magnification / push‑pull effect on the letters only.
-- Lens visuals are rendered as instanced quads:
-  - A ring + core glow shader makes the lens areas visible.
-  - These render on top of the plane (no depth test) so they remain readable.
+- Lens visuals are intentionally disabled; the distortion is invisible.
+- Lenses fade in/out smoothly over their lifetime; strength and speed scale with the fade.
+- Lens motion is bounded to the inner region of the spiral plane (half‑radius).
 
 ## Spiral Text Behavior
 ### Text Source and Generator
@@ -99,17 +103,20 @@ This project renders a single Three.js WebGL scene with a text‑mapped sphere a
 - Rendering uses `EffectComposer` with:
   - A base `RenderPass`.
   - A custom noise `ShaderPass`.
-- The noise shader currently uses a pink‑noise style FBM (1/f weighting).
+- The noise shader uses a pink‑noise style FBM (1/f weighting).
+- Noise configuration is created via `createNoiseShader(amount, scale, speed)` in `noise.ts`.
 - Noise amount, scale, and speed are exposed in the inspector.
 
 ## Inspector / Live Controls
 - Uses `lil-gui` to expose real‑time tuning.
 - Current controls:
+  - Background color.
   - Noise amount, scale, speed.
   - Sphere color.
   - Sphere letter color (and grid color).
   - Spiral plane color.
   - Spiral letter color.
+  - Font family (monospace vs Roboto).
 
 ## Music / SoundCloud Behavior
 - Sound is provided by a hidden SoundCloud widget iframe created in `sound.ts`.
@@ -127,11 +134,14 @@ This project renders a single Three.js WebGL scene with a text‑mapped sphere a
 - Base material parameters (roughness/metalness) are shared for consistency.
 - Sphere base color is independent from the letter texture.
 - Spiral plane and spiral letters have independent colors for contrast.
+## Typography
+- Roboto is loaded via Google Fonts and can be selected in the inspector.
+- Switching fonts rebuilds the sphere text texture and the spiral glyph atlas.
 
 ## Performance Considerations
 - Sphere text is handled by UV offset (cheap per frame).
 - Spiral letters are instanced on the GPU; only per‑slot glyph indices update when wrapping.
-- Plane particles and lens visuals are instanced and update small attribute buffers per frame.
+- Plane particles and lens distortions are instanced and update small attribute buffers per frame.
 - Post‑processing adds a single full‑screen pass; noise complexity is intentionally low.
 
 ## Extensibility

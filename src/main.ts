@@ -105,6 +105,7 @@ scene.add(spiralPlane)
 
 const composer = new EffectComposer(renderer)
 composer.addPass(new RenderPass(scene, camera))
+
 const noisePass = new ShaderPass(createNoiseShader(0.061125, 2.8, 0.12))
 composer.addPass(noisePass)
 
