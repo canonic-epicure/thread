@@ -39,7 +39,7 @@ const SPIRAL_RETURN_DURATION = 5
 const SPIRAL_RELEASE_DURATION = 5
 const SPIRAL_STOP_THRESHOLD = 0.01
 
-const PLANE_PARTICLE_COUNT = 100
+const PLANE_PARTICLE_COUNT = 80
 const PLANE_PARTICLE_SPEED_MIN = 0.6
 const PLANE_PARTICLE_SPEED_MAX = 1.6
 const PLANE_PARTICLE_LIFE_MIN = 0.35
@@ -48,9 +48,23 @@ const PLANE_PARTICLE_TRAIL_SECONDS = 0.08
 const PLANE_PARTICLE_EDGE_PADDING = 0.1
 const PLANE_PARTICLE_HEIGHT_OFFSET = 0.003
 const PLANE_PARTICLE_WIDTH = 0.01
+
 const PLANE_FADE_RESOLUTION = 512
 const PLANE_FADE_INNER = 0.15
 const PLANE_FADE_OUTER = 0.95
+
+const PLANE_LENS_COUNT = 5
+const PLANE_LENS_RADIUS_MIN = 0.2
+const PLANE_LENS_RADIUS_MAX = 1.5
+const PLANE_LENS_STRENGTH_MIN = 0.09
+const PLANE_LENS_STRENGTH_MAX = 0.18
+const PLANE_LENS_SPEED_MIN = 0.3
+const PLANE_LENS_SPEED_MAX = 0.8
+const PLANE_LENS_BOUNDS_SCALE = 0.5
+const PLANE_LENS_LIFE_MIN = 3.5
+const PLANE_LENS_LIFE_MAX = 7.5
+const PLANE_LENS_FADE_IN = 0.5
+const PLANE_LENS_FADE_OUT = 0.5
 
 type SpiralSlot = {
     char: string
@@ -72,6 +86,21 @@ type PlaneParticle = {
     speed: number
     age: number
     life: number
+}
+
+type PlaneLens = {
+    pos: THREE.Vector2
+    vel: THREE.Vector2
+    radius: number
+    baseStrength: number
+    baseSpeed: number
+    age: number
+    life: number
+}
+
+type PlaneLensVisual = {
+    object: THREE.Mesh
+    update: (lenses: PlaneLens[]) => void
 }
 
 const SPIRAL_TEXT_CHARS = Array.from(LONG_TEXT)
@@ -276,7 +305,7 @@ function createPlaneParticles(half: number): {
     const material = new THREE.ShaderMaterial({
         transparent: true,
         depthWrite: false,
-        depthTest: true,
+        depthTest: false,
         blending: THREE.AdditiveBlending,
         uniforms: {
             uColor: { value: new THREE.Color(0.85, 0.92, 1.0) }
@@ -315,6 +344,7 @@ function createPlaneParticles(half: number): {
 
     const mesh = new THREE.Mesh(geometry, material)
     mesh.frustumCulled = false
+    mesh.renderOrder = 6
 
     const spawnParticle = (particle: PlaneParticle) => {
         const range = half - PLANE_PARTICLE_EDGE_PADDING
@@ -408,6 +438,7 @@ export function createSpiralController(options: SpiralControllerOptions): Spiral
     const particleSystem = createPlaneParticles(half)
     particleSystem.object.renderOrder = 1
     plane.add(particleSystem.object)
+    // Lens visuals removed; keep only letter distortion.
     const spiralCharGenerator = createSpiralCharGenerator(SPIRAL_TEXT_CHARS)
     const spiralSlots = createSpiralSlots(spiralCharGenerator)
     assignDisplacedIndices(spiralSlots)
@@ -470,7 +501,11 @@ export function createSpiralController(options: SpiralControllerOptions): Spiral
             uLetterColor: { value: new THREE.Color(options.letterColor) },
             uAlphaEdge: { value: SPIRAL_ALPHA_EDGE },
             uAlphaCenter: { value: SPIRAL_ALPHA_CENTER },
-            uDebugSolid: { value: 0 }
+            uDebugSolid: { value: 0 },
+            uLensCount: { value: 0 },
+            uLensPos: { value: Array.from({ length: PLANE_LENS_COUNT }, () => new THREE.Vector2()) },
+            uLensRadius: { value: new Array(PLANE_LENS_COUNT).fill(0) },
+            uLensStrength: { value: new Array(PLANE_LENS_COUNT).fill(0) }
         },
         vertexShader: `
             attribute float aOriginalT;
@@ -489,6 +524,10 @@ export function createSpiralController(options: SpiralControllerOptions): Spiral
             uniform float uAlphaEdge;
             uniform float uAlphaCenter;
             uniform float uDebugSolid;
+            uniform int uLensCount;
+            uniform vec2 uLensPos[${PLANE_LENS_COUNT}];
+            uniform float uLensRadius[${PLANE_LENS_COUNT}];
+            uniform float uLensStrength[${PLANE_LENS_COUNT}];
 
             varying vec2 vUv;
             varying vec2 vGlyphUv;
@@ -544,6 +583,20 @@ export function createSpiralController(options: SpiralControllerOptions): Spiral
                 vec2 displacedPos = vec2(cos(angleDisplaced), sin(angleDisplaced)) * radiusDisplaced;
 
                 vec2 pos = mix(displacedPos, originalPos, uBlend);
+                for (int i = 0; i < ${PLANE_LENS_COUNT}; i += 1) {
+                    if (i >= uLensCount) {
+                        break;
+                    }
+                    vec2 delta = pos - uLensPos[i];
+                    float dist = length(delta);
+                    float radius = uLensRadius[i];
+                    if (dist < radius) {
+                        float t = 1.0 - (dist / radius);
+                        float falloff = t * t * (3.0 - 2.0 * t);
+                        vec2 dir = dist > 0.0001 ? (delta / dist) : vec2(1.0, 0.0);
+                        pos += dir * uLensStrength[i] * falloff;
+                    }
+                }
 
                 vec2 quad = position.xy * uLetterSize;
                 vec3 normal = planeNormal(pos);
@@ -613,11 +666,88 @@ export function createSpiralController(options: SpiralControllerOptions): Spiral
     let returnDelayRemaining = SPIRAL_RETURN_DELAY
     let lastProgressIndex = 0
 
+    const lensParticles: PlaneLens[] = []
+    const lensBounds = half * PLANE_LENS_BOUNDS_SCALE
+    const spawnLens = (lens: PlaneLens, randomAge: boolean) => {
+        const angle = Math.random() * Math.PI * 2
+        lens.pos.set(
+            THREE.MathUtils.randFloatSpread(lensBounds),
+            THREE.MathUtils.randFloatSpread(lensBounds)
+        )
+        lens.vel.set(Math.cos(angle), Math.sin(angle))
+        lens.radius = THREE.MathUtils.lerp(
+            PLANE_LENS_RADIUS_MIN,
+            PLANE_LENS_RADIUS_MAX,
+            Math.random()
+        )
+        lens.baseStrength = THREE.MathUtils.lerp(
+            PLANE_LENS_STRENGTH_MIN,
+            PLANE_LENS_STRENGTH_MAX,
+            Math.random()
+        )
+        lens.baseSpeed = THREE.MathUtils.lerp(
+            PLANE_LENS_SPEED_MIN,
+            PLANE_LENS_SPEED_MAX,
+            Math.random()
+        )
+        lens.life = THREE.MathUtils.lerp(PLANE_LENS_LIFE_MIN, PLANE_LENS_LIFE_MAX, Math.random())
+        lens.age = randomAge ? Math.random() * lens.life : 0
+    }
+
+    for (let i = 0; i < PLANE_LENS_COUNT; i += 1) {
+        const lens: PlaneLens = {
+            pos: new THREE.Vector2(),
+            vel: new THREE.Vector2(),
+            radius: 0,
+            baseStrength: 0,
+            baseSpeed: 0,
+            age: 0,
+            life: 1
+        }
+        spawnLens(lens, true)
+        lensParticles.push(lens)
+    }
+    spiralMaterial.uniforms.uLensCount.value = PLANE_LENS_COUNT
+    const lensPosUniform = spiralMaterial.uniforms.uLensPos.value as THREE.Vector2[]
+    const lensRadiusUniform = spiralMaterial.uniforms.uLensRadius.value as number[]
+    const lensStrengthUniform = spiralMaterial.uniforms.uLensStrength.value as number[]
+
     const updateSpiral = (
         delta: number,
         sphereState: { isPointerDown: boolean; scrollSpeed: number }
     ) => {
         particleSystem.update(delta)
+        for (let i = 0; i < lensParticles.length; i += 1) {
+            const lens = lensParticles[i]
+            lens.age += delta
+            if (lens.age >= lens.life) {
+                spawnLens(lens, false)
+            }
+            const lifeT = lens.life > 0 ? THREE.MathUtils.clamp(lens.age / lens.life, 0, 1) : 1
+            const fadeIn = THREE.MathUtils.smoothstep(
+                lifeT,
+                0,
+                PLANE_LENS_FADE_IN
+            )
+            const fadeOut =
+                1 -
+                THREE.MathUtils.smoothstep(
+                    lifeT,
+                    1 - PLANE_LENS_FADE_OUT,
+                    1
+                )
+            const fade = fadeIn * fadeOut
+            const speedScale = fade
+            lens.pos.x += lens.vel.x * lens.baseSpeed * speedScale * delta
+            lens.pos.y += lens.vel.y * lens.baseSpeed * speedScale * delta
+            if (lens.pos.x > lensBounds) lens.pos.x = -lensBounds
+            if (lens.pos.x < -lensBounds) lens.pos.x = lensBounds
+            if (lens.pos.y > lensBounds) lens.pos.y = -lensBounds
+            if (lens.pos.y < -lensBounds) lens.pos.y = lensBounds
+            lensPosUniform[i].copy(lens.pos)
+            lensRadiusUniform[i] = lens.radius
+            lensStrengthUniform[i] = lens.baseStrength * fade
+        }
         spiralProgress = (spiralProgress + SPIRAL_FLOW_SPEED * delta) % 1
         const progressIndex = Math.floor(spiralProgress * SPIRAL_LETTER_COUNT)
         let glyphsUpdated = false

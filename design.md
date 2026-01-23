@@ -1,6 +1,6 @@
 # Design Overview
 
-This project renders a single Three.js WebGL scene with a text‑mapped sphere and a surrounding depressed plane. The experience is driven by animated text flow, inertia‑based interaction on the sphere, and a spiral of letters that flows toward a central sink. The system is designed so the sphere appears covered in scrolling text, while the plane provides a large context with a dense spiral of characters converging to the center.
+This project renders a single Three.js WebGL scene with a text‑mapped sphere and a surrounding depressed plane. The experience is driven by animated text flow, inertia‑based interaction on the sphere, and a spiral of letters that flows toward a central sink. The system is designed so the sphere appears covered in scrolling text, while the plane provides a large context with a dense spiral of characters converging to the center. On top of the base scene, the renderer applies a post‑processing noise pass and exposes live controls through an inspector panel.
 
 ## Core Goals
 - Present a centered 3D sphere whose surface is covered by a rectangular grid of letters.
@@ -9,6 +9,7 @@ This project renders a single Three.js WebGL scene with a text‑mapped sphere a
 - Render a spiral of letters on the plane, moving along the spiral path toward the center.
 - Allow interactive control over the sphere’s text flow with inertia and smooth return to auto‑scroll.
 - Keep the spiral letters anchored to the curved surface and oriented toward the center.
+- Keep the scene tunable via an inspector panel (noise + colors).
 
 ## Scene Composition
 ### Camera
@@ -20,12 +21,15 @@ This project renders a single Three.js WebGL scene with a text‑mapped sphere a
 - Simple lighting to preserve text legibility and emphasize surface shape.
 
 ### Sphere
-- Static sphere mesh (geometry does not spin).
-- A canvas‑generated texture provides:
-  - A rectangular grid.
-  - Letter columns drawn vertically in each grid cell.
-  - Per‑column text offsets so columns differ but loop cleanly.
+- The sphere is composed of two meshes:
+  - Base mesh: solid `MeshStandardMaterial` whose color is adjustable by the inspector.
+  - Text mesh: transparent `MeshStandardMaterial` that carries the letter texture and floats slightly above the base.
+- The text texture is generated via a 2D canvas:
+  - A rectangular grid is drawn across the texture.
+  - Letter columns are drawn vertically in each grid cell.
+  - Per‑column offsets are used so columns differ but loop cleanly.
 - The texture scrolls vertically via UV offset, creating the illusion of letters moving upward.
+- A designated column receives a glow pass on the canvas (shadow blur + additive blend), so the “central” column reads as emphasized text.
 - Scroll speed has inertia:
   - Pointer down brings base scroll toward zero.
   - Dragging applies velocity impulses.
@@ -34,10 +38,31 @@ This project renders a single Three.js WebGL scene with a text‑mapped sphere a
 ### Spiral Plane
 - A large plane with a Gaussian‑style depression centered at the origin.
 - The base plane mesh is highly segmented for a smooth sink.
-- The plane material is opaque and dark so spiral letters stand out.
+- The plane material uses an alpha map so the edges fade out, reducing the visible square boundary.
+- The plane renders only the front side; the back face is culled to avoid seeing through the plane.
+
+### Spiral Letters
 - Spiral letters are rendered as instanced quads with a custom `ShaderMaterial`:
   - The shader computes spiral position, alpha fade, and orientation on the GPU.
-  - The letter quads are oriented toward the center and aligned to the curved surface.
+  - Each quad is oriented toward the center and aligned to the curved surface normal.
+- A glyph atlas is built once on a canvas and used for all instances.
+- Only glyph indices update when slots wrap (cheap per frame).
+
+### Plane Particles
+- Short “streak” particles move across the plane surface:
+  - Each particle is a tiny ribbon quad rendered via instancing.
+  - A head/tail segment is updated per frame to form a short afterglow.
+  - Particles respawn when they expire or drift outside the bounds.
+- Particle positions follow the depressed plane height so they hug the surface.
+
+### Plane Lens Distortion
+- A set of moving “lens” particles distort the spiral letter positions:
+  - Each lens has a position, radius, and strength.
+  - The spiral vertex shader pushes letter positions radially when they fall inside a lens.
+  - This produces a magnification / push‑pull effect on the letters only.
+- Lens visuals are rendered as instanced quads:
+  - A ring + core glow shader makes the lens areas visible.
+  - These render on top of the plane (no depth test) so they remain readable.
 
 ## Spiral Text Behavior
 ### Text Source and Generator
@@ -70,18 +95,36 @@ This project renders a single Three.js WebGL scene with a text‑mapped sphere a
 - If the pointer is held, a delay begins; after the delay the spiral transitions to ordered positions.
 - On release, the spiral transitions back to displaced positions with smooth easing.
 
+## Post‑Processing
+- Rendering uses `EffectComposer` with:
+  - A base `RenderPass`.
+  - A custom noise `ShaderPass`.
+- The noise shader currently uses a pink‑noise style FBM (1/f weighting).
+- Noise amount, scale, and speed are exposed in the inspector.
+
+## Inspector / Live Controls
+- Uses `lil-gui` to expose real‑time tuning.
+- Current controls:
+  - Noise amount, scale, speed.
+  - Sphere color.
+  - Sphere letter color (and grid color).
+  - Spiral plane color.
+  - Spiral letter color.
+
 ## Materials and Color Strategy
 - Base material parameters (roughness/metalness) are shared for consistency.
-- Sphere and plane colors are separated for contrast (light letters on dark plane).
-- Spiral letters use a fixed color and alpha gradient for depth cues.
+- Sphere base color is independent from the letter texture.
+- Spiral plane and spiral letters have independent colors for contrast.
 
 ## Performance Considerations
 - Sphere text is handled by UV offset (cheap per frame).
 - Spiral letters are instanced on the GPU; only per‑slot glyph indices update when wrapping.
-- The spiral texture is a single glyph atlas texture reused by all instances.
+- Plane particles and lens visuals are instanced and update small attribute buffers per frame.
+- Post‑processing adds a single full‑screen pass; noise complexity is intentionally low.
 
 ## Extensibility
 - The sphere controller is isolated and can be reused or swapped without touching main rendering logic.
 - The spiral plane is self‑contained and can be replaced with other patterns.
 - Text source can be replaced by editing `text.ts`.
 - Interaction thresholds and timings are controlled by constants in `spiral.ts` and `sphere.ts`.
+- The inspector can be extended by adding new uniforms or controller setters and wiring them to GUI controls.
