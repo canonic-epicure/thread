@@ -450,7 +450,7 @@ export function createSpiralController(options: SpiralControllerOptions): Spiral
 
         const t = blendProgress
         const eased = t * t * (3 - 2 * t)
-        blend = blendTarget === 1 ? eased : eased
+        blend = eased
 
         if (glyphsUpdated) {
             glyphAttribute.needsUpdate = true
