@@ -18,7 +18,7 @@ renderer.setSize(window.innerWidth, window.innerHeight)
 app.appendChild(renderer.domElement)
 
 const scene = new THREE.Scene()
-scene.background = new THREE.Color(0x0b0b0b)
+scene.background = new THREE.Color(0x1e1e1e)
 
 const noiseShader = {
     uniforms: {

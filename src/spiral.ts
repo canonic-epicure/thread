@@ -35,8 +35,8 @@ const SPIRAL_ALPHA_EDGE = 0
 const SPIRAL_ALPHA_CENTER = 1.0
 
 const SPIRAL_RETURN_DELAY = 0.6
-const SPIRAL_RETURN_DURATION = 5
-const SPIRAL_RELEASE_DURATION = 5
+const SPIRAL_RETURN_DURATION = 7
+const SPIRAL_RELEASE_DURATION = 7
 const SPIRAL_STOP_THRESHOLD = 0.01
 
 const PLANE_PARTICLE_COUNT = 80
@@ -50,16 +50,16 @@ const PLANE_PARTICLE_HEIGHT_OFFSET = 0.003
 const PLANE_PARTICLE_WIDTH = 0.01
 
 const PLANE_FADE_RESOLUTION = 512
-const PLANE_FADE_INNER = 0.15
-const PLANE_FADE_OUTER = 0.95
+const PLANE_FADE_INNER = 0.12
+const PLANE_FADE_OUTER = 0.85
 
 const PLANE_LENS_COUNT = 5
 const PLANE_LENS_RADIUS_MIN = 0.2
-const PLANE_LENS_RADIUS_MAX = 1.5
+const PLANE_LENS_RADIUS_MAX = 1
 const PLANE_LENS_STRENGTH_MIN = 0.09
 const PLANE_LENS_STRENGTH_MAX = 0.18
-const PLANE_LENS_SPEED_MIN = 0.3
-const PLANE_LENS_SPEED_MAX = 0.8
+const PLANE_LENS_SPEED_MIN = 0.05
+const PLANE_LENS_SPEED_MAX = 0.25
 const PLANE_LENS_BOUNDS_SCALE = 0.5
 const PLANE_LENS_LIFE_MIN = 3.5
 const PLANE_LENS_LIFE_MAX = 7.5
@@ -237,7 +237,7 @@ function createDepressedPlane(
         transparent: true,
         depthWrite: true,
         alphaMap,
-        alphaTest: 0.01,
+        alphaTest: 0,
         side: THREE.FrontSide
     })
 
