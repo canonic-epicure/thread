@@ -1,4 +1,7 @@
 import * as THREE from 'three'
+import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js'
+import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js'
+import { ShaderPass } from 'three/examples/jsm/postprocessing/ShaderPass.js'
 import { createSphereController } from './sphere'
 // import { createPlaneController } from './plane'
 import { createSpiralController } from './spiral'
@@ -16,6 +19,67 @@ app.appendChild(renderer.domElement)
 
 const scene = new THREE.Scene()
 scene.background = new THREE.Color(0x0b0b0b)
+
+const noiseShader = {
+    uniforms: {
+        tDiffuse: { value: null },
+        uTime: { value: 0 },
+        uAmount: { value: 0.1125 }
+    },
+    vertexShader: `
+        varying vec2 vUv;
+        void main() {
+            vUv = uv;
+            gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+        }
+    `,
+    fragmentShader: `
+        uniform sampler2D tDiffuse;
+        uniform float uTime;
+        uniform float uAmount;
+        varying vec2 vUv;
+
+        float hash(vec2 p) {
+            p = fract(p * vec2(123.34, 456.21));
+            p += dot(p, p + 34.345);
+            return fract(p.x * p.y);
+        }
+
+        float noise2d(vec2 p) {
+            vec2 i = floor(p);
+            vec2 f = fract(p);
+            float a = hash(i);
+            float b = hash(i + vec2(1.0, 0.0));
+            float c = hash(i + vec2(0.0, 1.0));
+            float d = hash(i + vec2(1.0, 1.0));
+            vec2 u = f * f * (3.0 - 2.0 * f);
+            return mix(a, b, u.x) +
+                (c - a) * u.y * (1.0 - u.x) +
+                (d - b) * u.x * u.y;
+        }
+
+        float pinkNoise(vec2 p) {
+            float value = 0.0;
+            float amplitude = 1.0;
+            float frequency = 1.0;
+            for (int i = 0; i < 5; i += 1) {
+                value += noise2d(p * frequency) * amplitude;
+                frequency *= 2.0;
+                amplitude *= 0.5;
+            }
+            return value;
+        }
+
+        void main() {
+            vec4 color = texture2D(tDiffuse, vUv);
+            vec2 uv = vUv * 2.8 + uTime * 0.12;
+            float pink = pinkNoise(uv);
+            float noise = pink - 0.5;
+            color.rgb += noise * uAmount;
+            gl_FragColor = color;
+        }
+    `
+}
 
 const camera = new THREE.PerspectiveCamera(
     90,
@@ -73,11 +137,16 @@ const { spiralPlane, updateSpiral } = createSpiralController({
 })
 scene.add(spiralPlane)
 
+const composer = new EffectComposer(renderer)
+composer.addPass(new RenderPass(scene, camera))
+const noisePass = new ShaderPass(noiseShader)
+composer.addPass(noisePass)
 
 function onResize() {
     camera.aspect = window.innerWidth / window.innerHeight
     camera.updateProjectionMatrix()
     renderer.setSize(window.innerWidth, window.innerHeight)
+    composer.setSize(window.innerWidth, window.innerHeight)
 }
 window.addEventListener('resize', onResize)
 
@@ -105,6 +174,7 @@ function animate() {
     // mouse camera move
     camera.position.x += (mouseX * 0.5 - camera.position.x) * 0.02
 
-    renderer.render(scene, camera)
+    noisePass.uniforms.uTime.value += delta
+    composer.render()
 }
 animate()
