@@ -23,9 +23,11 @@ type SphereControllerOptions = {
 }
 
 type SphereController = {
-    sphere: THREE.Mesh
+    sphere: THREE.Object3D
     updateSphere: (delta: number) => void
     getSphereState: () => { isPointerDown: boolean; scrollSpeed: number }
+    setSphereColor: (color: string | number) => void
+    setSphereLetterColor: (letterColor: string, gridColor?: string) => void
 }
 
 // Grid layout for the sphere texture (rectangular cells wrapped onto the sphere).
@@ -69,8 +71,6 @@ function createSphereTexture(
     }
 
     ctx.clearRect(0, 0, size, size)
-    ctx.fillStyle = 'black'
-    ctx.fillRect(0, 0, size, size)
 
     const cellWidth = size / SPHERE_COLUMN_COUNT
     const cellHeight = size / SPHERE_ROW_COUNT
@@ -132,7 +132,9 @@ function createSphereTexture(
 
 export function createSphereController(options: SphereControllerOptions): SphereController {
     const { renderer, camera, materialParams, letterColor, gridColor } = options
-    const texture = createSphereTexture(renderer, letterColor, gridColor)
+    let currentLetterColor = letterColor
+    let currentGridColor = gridColor
+    let texture = createSphereTexture(renderer, currentLetterColor, currentGridColor)
     // Repeat wrapping allows endless vertical scrolling on the sphere.
     texture.wrapS = THREE.RepeatWrapping
     texture.wrapT = THREE.RepeatWrapping
@@ -141,14 +143,36 @@ export function createSphereController(options: SphereControllerOptions): Sphere
     texture.offset.set(SPHERE_TEXTURE_OFFSET, 0)
 
     // Sphere geometry stays fixed; motion is done by scrolling the texture.
-    const sphere = new THREE.Mesh(
-        new THREE.SphereGeometry(1, 64, 64),
-        new THREE.MeshStandardMaterial({
-            map: texture,
-            ...materialParams
-        })
-    )
+    const sphereGeometry = new THREE.SphereGeometry(1, 64, 64)
+    const sphereBaseMaterial = new THREE.MeshStandardMaterial({
+        ...materialParams
+    })
+    const sphereTextMaterial = new THREE.MeshStandardMaterial({
+        map: texture,
+        color: 0xffffff,
+        transparent: true,
+        depthWrite: false,
+        roughness: materialParams.roughness,
+        metalness: materialParams.metalness
+    })
+    const baseSphere = new THREE.Mesh(sphereGeometry, sphereBaseMaterial)
+    const textSphere = new THREE.Mesh(sphereGeometry, sphereTextMaterial)
+    textSphere.scale.setScalar(1.002)
+    const sphere = new THREE.Group()
     sphere.position.y = -0.5
+    sphere.add(baseSphere, textSphere)
+
+    const rebuildTexture = () => {
+        const nextTexture = createSphereTexture(renderer, currentLetterColor, currentGridColor)
+        nextTexture.wrapS = THREE.RepeatWrapping
+        nextTexture.wrapT = THREE.RepeatWrapping
+        nextTexture.repeat.set(1, 1)
+        nextTexture.offset.set(SPHERE_TEXTURE_OFFSET, 0)
+        texture.dispose()
+        texture = nextTexture
+        sphereTextMaterial.map = texture
+        sphereTextMaterial.needsUpdate = true
+    }
 
 
     // Raycast hit-testing ensures dragging only starts when clicking the sphere.
@@ -167,7 +191,7 @@ export function createSphereController(options: SphereControllerOptions): Sphere
         spherePointer.x = (event.clientX / window.innerWidth) * 2 - 1
         spherePointer.y = -(event.clientY / window.innerHeight) * 2 + 1
         sphereRaycaster.setFromCamera(spherePointer, camera)
-        const hit = sphereRaycaster.intersectObject(sphere, false)
+        const hit = sphereRaycaster.intersectObject(baseSphere, false)
         if (hit.length === 0) {
             return
         }
@@ -242,5 +266,17 @@ export function createSphereController(options: SphereControllerOptions): Sphere
         scrollSpeed: currentScrollSpeed
     })
 
-    return { sphere, updateSphere, getSphereState }
+    return {
+        sphere,
+        updateSphere,
+        getSphereState,
+        setSphereColor: (color: string | number) => {
+            sphereBaseMaterial.color.set(color)
+        },
+        setSphereLetterColor: (nextLetterColor: string, nextGridColor?: string) => {
+            currentLetterColor = nextLetterColor
+            currentGridColor = nextGridColor ?? nextLetterColor
+            rebuildTexture()
+        }
+    }
 }

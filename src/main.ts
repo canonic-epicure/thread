@@ -2,8 +2,8 @@ import * as THREE from 'three'
 import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js'
 import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js'
 import { ShaderPass } from 'three/examples/jsm/postprocessing/ShaderPass.js'
+import GUI from 'lil-gui'
 import { createSphereController } from './sphere'
-// import { createPlaneController } from './plane'
 import { createSpiralController } from './spiral'
 import './style.css'
 
@@ -24,7 +24,9 @@ const noiseShader = {
     uniforms: {
         tDiffuse: { value: null },
         uTime: { value: 0 },
-        uAmount: { value: 0.1125 }
+        uAmount: { value: 0.1125 },
+        uScale: { value: 2.8 },
+        uSpeed: { value: 0.12 }
     },
     vertexShader: `
         varying vec2 vUv;
@@ -37,6 +39,8 @@ const noiseShader = {
         uniform sampler2D tDiffuse;
         uniform float uTime;
         uniform float uAmount;
+        uniform float uScale;
+        uniform float uSpeed;
         varying vec2 vUv;
 
         float hash(vec2 p) {
@@ -72,7 +76,7 @@ const noiseShader = {
 
         void main() {
             vec4 color = texture2D(tDiffuse, vUv);
-            vec2 uv = vUv * 2.8 + uTime * 0.12;
+            vec2 uv = vUv * uScale + uTime * uSpeed;
             float pink = pinkNoise(uv);
             float noise = pink - 0.5;
             color.rgb += noise * uAmount;
@@ -95,13 +99,26 @@ directional.position.set(2, 3, 4)
 scene.add(ambient, directional)
 
 const letterFillAlpha = 0.75
-const letterColor = `rgba(255,255,255,${letterFillAlpha})`
-const gridColor = `rgba(255,255,255,${letterFillAlpha})`
+const colorState = {
+    sphereColor: '#b66363',
+    sphereLetters: '#ffffff',
+    spiralPlane: '#5d7a89',
+    spiralLetters: '#ffffff'
+}
+const toRgba = (hex: string, alpha: number) => {
+    const color = new THREE.Color(hex)
+    const r = Math.round(color.r * 255)
+    const g = Math.round(color.g * 255)
+    const b = Math.round(color.b * 255)
+    return `rgba(${r},${g},${b},${alpha})`
+}
+const letterColor = toRgba(colorState.sphereLetters, letterFillAlpha)
+const gridColor = toRgba(colorState.sphereLetters, letterFillAlpha)
 
 const sharedSurface = {
     roughness: 0.6,
     metalness: 0.1,
-    sphereColor: 0xffffff,
+    sphereColor: Number.parseInt(colorState.sphereColor.replace('#', ''), 16),
     planeColor: 0x000000
 }
 
@@ -111,29 +128,27 @@ const baseMaterialParams = {
     metalness: sharedSurface.metalness
 }
 
-const { sphere, updateSphere, getSphereState } = createSphereController({
+const { sphere, updateSphere, getSphereState, setSphereColor, setSphereLetterColor } =
+    createSphereController({
     renderer,
     camera,
     materialParams: baseMaterialParams,
     letterColor,
     gridColor
-})
+    })
 scene.add(sphere)
+setSphereColor(colorState.sphereColor)
 
-// const { plane, updatePlane } = createPlaneController({
-//     renderer,
-//     materialParams: baseMaterialParams,
-//     gridColor,
-//     letterFillAlpha,
-//     planeColor: sharedSurface.planeColor
-// })
-// scene.add(plane)
-
-const { spiralPlane, updateSpiral } = createSpiralController({
+const {
+    spiralPlane,
+    updateSpiral,
+    setSpiralPlaneColor,
+    setSpiralLetterColor
+} = createSpiralController({
     renderer,
     materialParams: baseMaterialParams,
-    planeColor: 0x0b0b0b,
-    letterColor: 0xffffff
+    planeColor: Number.parseInt(colorState.spiralPlane.replace('#', ''), 16),
+    letterColor: Number.parseInt(colorState.spiralLetters.replace('#', ''), 16)
 })
 scene.add(spiralPlane)
 
@@ -141,6 +156,39 @@ const composer = new EffectComposer(renderer)
 composer.addPass(new RenderPass(scene, camera))
 const noisePass = new ShaderPass(noiseShader)
 composer.addPass(noisePass)
+
+const gui = new GUI({ title: 'Inspector' })
+const colorFolder = gui.addFolder('Colors')
+colorFolder
+    .addColor(colorState, 'sphereColor')
+    .name('Sphere')
+    .onChange((value: string) => setSphereColor(value))
+colorFolder
+    .addColor(colorState, 'sphereLetters')
+    .name('Sphere Letters')
+    .onChange((value: string) =>
+        setSphereLetterColor(toRgba(value, letterFillAlpha), toRgba(value, letterFillAlpha))
+    )
+colorFolder
+    .addColor(colorState, 'spiralPlane')
+    .name('Spiral Plane')
+    .onChange((value: string) => setSpiralPlaneColor(value))
+colorFolder
+    .addColor(colorState, 'spiralLetters')
+    .name('Spiral Letters')
+    .onChange((value: string) => setSpiralLetterColor(value))
+colorFolder.open()
+const noiseFolder = gui.addFolder('Noise')
+noiseFolder
+    .add(noisePass.uniforms.uAmount, 'value', 0, 0.4, 0.0025)
+    .name('Amount')
+noiseFolder
+    .add(noisePass.uniforms.uScale, 'value', 0.5, 6, 0.05)
+    .name('Scale')
+noiseFolder
+    .add(noisePass.uniforms.uSpeed, 'value', 0, 0.5, 0.005)
+    .name('Speed')
+noiseFolder.open()
 
 function onResize() {
     camera.aspect = window.innerWidth / window.innerHeight
@@ -164,8 +212,8 @@ let mouseX = 0
 function animate() {
     requestAnimationFrame(animate)
     const delta = clock.getDelta()
+
     updateSphere(delta)
-    // updatePlane(delta)
     updateSpiral(delta, getSphereState())
 
     camera.position.y += Math.cos(cameraShakeY) / 500

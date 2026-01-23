@@ -18,6 +18,8 @@ type SpiralController = {
         delta: number,
         sphereState: { isPointerDown: boolean; scrollSpeed: number }
     ) => void
+    setSpiralPlaneColor: (color: string | number) => void
+    setSpiralLetterColor: (color: string | number) => void
 }
 
 const PLANE_SIZE = 15
@@ -46,6 +48,9 @@ const PLANE_PARTICLE_TRAIL_SECONDS = 0.08
 const PLANE_PARTICLE_EDGE_PADDING = 0.1
 const PLANE_PARTICLE_HEIGHT_OFFSET = 0.003
 const PLANE_PARTICLE_WIDTH = 0.01
+const PLANE_FADE_RESOLUTION = 512
+const PLANE_FADE_INNER = 0.15
+const PLANE_FADE_OUTER = 0.95
 
 type SpiralSlot = {
     char: string
@@ -196,11 +201,15 @@ function createDepressedPlane(
 
     geometry.computeVertexNormals()
 
+    const alphaMap = createPlaneAlphaMap()
     const material = new THREE.MeshStandardMaterial({
         ...materialParams,
         color: planeColor,
-        transparent: false,
-        side: THREE.DoubleSide
+        transparent: true,
+        depthWrite: true,
+        alphaMap,
+        alphaTest: 0.01,
+        side: THREE.FrontSide
     })
 
     const plane = new THREE.Mesh(geometry, material)
@@ -208,6 +217,39 @@ function createDepressedPlane(
     plane.rotation.x = -1.3
     plane.rotation.y = 0
     return plane
+}
+
+function createPlaneAlphaMap(): THREE.CanvasTexture {
+    const size = PLANE_FADE_RESOLUTION
+    const canvas = document.createElement('canvas')
+    canvas.width = size
+    canvas.height = size
+    const ctx = canvas.getContext('2d')
+    if (!ctx) {
+        throw new Error('Failed to get plane alpha map context')
+    }
+
+    const center = size / 2
+    const radius = center
+    const gradient = ctx.createRadialGradient(
+        center,
+        center,
+        radius * PLANE_FADE_INNER,
+        center,
+        center,
+        radius * PLANE_FADE_OUTER
+    )
+    gradient.addColorStop(0, 'rgba(255,255,255,1)')
+    gradient.addColorStop(1, 'rgba(255,255,255,0)')
+    ctx.fillStyle = gradient
+    ctx.fillRect(0, 0, size, size)
+
+    const texture = new THREE.CanvasTexture(canvas)
+    texture.minFilter = THREE.LinearFilter
+    texture.magFilter = THREE.LinearFilter
+    texture.generateMipmaps = false
+    texture.needsUpdate = true
+    return texture
 }
 
 function createPlaneParticles(half: number): {
@@ -360,6 +402,7 @@ function createPlaneParticles(half: number): {
 
 export function createSpiralController(options: SpiralControllerOptions): SpiralController {
     const plane = createDepressedPlane(options.materialParams, options.planeColor)
+    const planeMaterial = plane.material as THREE.MeshStandardMaterial
     const half = PLANE_SIZE / 2
     const radialStep = half
     const particleSystem = createPlaneParticles(half)
@@ -629,5 +672,14 @@ export function createSpiralController(options: SpiralControllerOptions): Spiral
         spiralMaterial.uniforms.uBlend.value = blend
     }
 
-    return { spiralPlane: plane, updateSpiral }
+    return {
+        spiralPlane: plane,
+        updateSpiral,
+        setSpiralPlaneColor: (color: string | number) => {
+            planeMaterial.color.set(color)
+        },
+        setSpiralLetterColor: (color: string | number) => {
+            spiralMaterial.uniforms.uLetterColor.value.set(color)
+        }
+    }
 }
