@@ -1,8 +1,4 @@
-export const createNoiseShader = (
-    amount = 0.061125,
-    scale = 2.8,
-    speed = 0.12
-) => ({
+export const createNoiseShader = (amount = 0.061125, scale = 2.8, speed = 0.12) => ({
     uniforms: {
         tDiffuse: { value: null },
         uTime: { value: 0 },
