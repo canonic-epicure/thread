@@ -32,31 +32,56 @@ const SPIRAL_LETTER_COUNT = SPIRAL_TURNS * 100
 const SPIRAL_ALPHA_EDGE = 0
 const SPIRAL_ALPHA_CENTER = 1.0
 
-const SPIRAL_STRING_OFFSET_RADIUS = 16
+const SPIRAL_STRING_OFFSET_RADIUS = 50
 const SPIRAL_RETURN_DELAY = 0.6
 const SPIRAL_RETURN_DURATION = 0.5
 const SPIRAL_RELEASE_DURATION = 2.0
 const SPIRAL_STOP_THRESHOLD = 0.005
 
-const SPIRAL_ENTRIES = Array.from(LONG_TEXT).map((char, index) => ({
-    char,
-    originalIndex: index,
-    alteredIndex:
-        index +
-        Math.floor(Math.random() * (SPIRAL_STRING_OFFSET_RADIUS * 2 + 1)) - SPIRAL_STRING_OFFSET_RADIUS
-}))
-SPIRAL_ENTRIES.sort((a, b) => a.alteredIndex - b.alteredIndex)
-SPIRAL_ENTRIES.forEach((entry, index) => {
-    entry.alteredIndex = index
-})
+type SpiralSlot = {
+    char: string
+    originalIndex: number
+    alteredIndex: number
+    displacedIndex: number
+}
 
-const SPIRAL_SAMPLE_INDICES = (() => {
-    const total = SPIRAL_ENTRIES.length
-    const step = total / SPIRAL_LETTER_COUNT
-    return Array.from({ length: SPIRAL_LETTER_COUNT }, (_, i) => {
-        return Math.floor(i * step) % total
+const SPIRAL_TEXT_CHARS = Array.from(LONG_TEXT)
+const SPIRAL_OFFSET_RANGE = SPIRAL_STRING_OFFSET_RADIUS * 2 + 1
+
+function* createSpiralCharGenerator(chars: string[]): Generator<string> {
+    if (chars.length === 0) {
+        while (true) {
+            yield ' '
+        }
+    }
+
+    let index = 0
+    while (true) {
+        yield chars[index]
+        index = (index + 1) % chars.length
+    }
+}
+
+function createSpiralSlots(generator: Generator<string>): SpiralSlot[] {
+    return Array.from({ length: SPIRAL_LETTER_COUNT }, (_, index) => ({
+        char: generator.next().value ?? ' ',
+        originalIndex: index,
+        alteredIndex:
+            index +
+            Math.floor(Math.random() * SPIRAL_OFFSET_RANGE) -
+                SPIRAL_STRING_OFFSET_RADIUS,
+        displacedIndex: 0
+    }))
+}
+
+function assignDisplacedIndices(slots: SpiralSlot[]): void {
+    const displacedOrder = slots
+        .slice()
+        .sort((a, b) => a.alteredIndex - b.alteredIndex)
+    displacedOrder.forEach((slot, index) => {
+        slot.displacedIndex = index
     })
-})()
+}
 
 function getPlaneHeightAt(x: number, y: number): number {
     const r = Math.hypot(x, y)
@@ -99,6 +124,9 @@ function createDepressedPlane(
 
 export function createSpiralController(options: SpiralControllerOptions): SpiralController {
     const plane = createDepressedPlane(options.materialParams, options.planeColor)
+    const spiralCharGenerator = createSpiralCharGenerator(SPIRAL_TEXT_CHARS)
+    const spiralSlots = createSpiralSlots(spiralCharGenerator)
+    assignDisplacedIndices(spiralSlots)
 
     const spiralCanvas = document.createElement('canvas')
     spiralCanvas.width = 4096
@@ -146,12 +174,28 @@ export function createSpiralController(options: SpiralControllerOptions): Spiral
     let blend = 0
     let blendTarget = 0
     let returnDelayRemaining = SPIRAL_RETURN_DELAY
+    let lastProgressIndex = 0
 
     const updateSpiral = (
         delta: number,
         sphereState: { isPointerDown: boolean; scrollSpeed: number }
     ) => {
-        spiralProgress = spiralProgress + SPIRAL_FLOW_SPEED * delta
+        spiralProgress = (spiralProgress + SPIRAL_FLOW_SPEED * delta) % 1
+        const progressIndex = Math.floor(spiralProgress * SPIRAL_LETTER_COUNT)
+        if (progressIndex !== lastProgressIndex) {
+            const steps =
+                (progressIndex - lastProgressIndex + SPIRAL_LETTER_COUNT) %
+                SPIRAL_LETTER_COUNT
+            for (let step = 0; step < steps; step += 1) {
+                lastProgressIndex =
+                    (lastProgressIndex + 1) % SPIRAL_LETTER_COUNT
+                const slotIndex =
+                    (SPIRAL_LETTER_COUNT - lastProgressIndex) %
+                    SPIRAL_LETTER_COUNT
+                spiralSlots[slotIndex].char =
+                    spiralCharGenerator.next().value ?? ' '
+            }
+        }
 
         spiralCtx.clearRect(0, 0, spiralCanvas.width, spiralCanvas.height)
 
@@ -175,12 +219,12 @@ export function createSpiralController(options: SpiralControllerOptions): Spiral
         const smoothing = 1 - Math.exp(-delta / duration)
         blend += (blendTarget - blend) * smoothing
 
-        const total = SPIRAL_ENTRIES.length
+        const total = SPIRAL_LETTER_COUNT
 
         for (let i = 0; i < SPIRAL_LETTER_COUNT; i += 1) {
-            const entry = SPIRAL_ENTRIES[SPIRAL_SAMPLE_INDICES[i]]
+            const entry = spiralSlots[i]
             const tOriginal = (entry.originalIndex / total + spiralProgress) % 1
-            const tDisplaced = (entry.alteredIndex / total + spiralProgress) % 1
+            const tDisplaced = (entry.displacedIndex / total + spiralProgress) % 1
 
             const radiusOriginal = half - tOriginal * (half - 0.2)
             const angleOriginal = SPIRAL_TURNS * Math.PI * 2 * tOriginal
