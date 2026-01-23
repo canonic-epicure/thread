@@ -38,10 +38,6 @@ const SPHERE_ROW_COUNT = 20
 const SPHERE_TEXTURE_SIZE = 2048
 const SPHERE_TEXTURE_OFFSET = 1 / (SPHERE_COLUMN_COUNT * 2)
 // The front-facing UV for a sphere in three.js maps to u ≈ 0.75.
-const SPHERE_CENTER_U = 0.75
-const SPHERE_CENTRAL_COLUMN = Math.floor(
-    ((SPHERE_CENTER_U + SPHERE_TEXTURE_OFFSET) % 1) * SPHERE_COLUMN_COUNT
-)
 const SPHERE_GLOW_BLUR = 32
 const SPHERE_GLOW_ALPHA = 0.85
 const SPHERE_GLOW_COLOR = '#efefef'
@@ -156,13 +152,11 @@ export function createSphereController(options: SphereControllerOptions): Sphere
     const sphereBaseMaterial = new THREE.MeshStandardMaterial({
         ...materialParams
     })
-    const sphereTextMaterial = new THREE.MeshStandardMaterial({
+    const sphereTextMaterial = new THREE.MeshBasicMaterial({
         map: texture,
         color: 0xffffff,
         transparent: true,
-        depthWrite: false,
-        roughness: materialParams.roughness,
-        metalness: materialParams.metalness
+        depthWrite: false
     })
     const baseSphere = new THREE.Mesh(sphereGeometry, sphereBaseMaterial)
     const textSphere = new THREE.Mesh(sphereGeometry, sphereTextMaterial)

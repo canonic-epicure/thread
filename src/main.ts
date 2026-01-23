@@ -6,6 +6,7 @@ import GUI from 'lil-gui'
 import { createSphereController } from './sphere.js'
 import { createSpiralController } from './spiral.js'
 import { initSoundCloud } from './sound'
+import { createNoiseShader } from './noise'
 import './style.css'
 
 const app = document.querySelector<HTMLDivElement>('#app')
@@ -25,70 +26,6 @@ app.appendChild(renderer.domElement)
 
 const scene = new THREE.Scene()
 
-const noiseShader = {
-    uniforms: {
-        tDiffuse: { value: null },
-        uTime: { value: 0 },
-        uAmount: { value: 0.061125 },
-        uScale: { value: 2.8 },
-        uSpeed: { value: 0.12 }
-    },
-    vertexShader: `
-        varying vec2 vUv;
-        void main() {
-            vUv = uv;
-            gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-        }
-    `,
-    fragmentShader: `
-        uniform sampler2D tDiffuse;
-        uniform float uTime;
-        uniform float uAmount;
-        uniform float uScale;
-        uniform float uSpeed;
-        varying vec2 vUv;
-
-        float hash(vec2 p) {
-            p = fract(p * vec2(123.34, 456.21));
-            p += dot(p, p + 34.345);
-            return fract(p.x * p.y);
-        }
-
-        float noise2d(vec2 p) {
-            vec2 i = floor(p);
-            vec2 f = fract(p);
-            float a = hash(i);
-            float b = hash(i + vec2(1.0, 0.0));
-            float c = hash(i + vec2(0.0, 1.0));
-            float d = hash(i + vec2(1.0, 1.0));
-            vec2 u = f * f * (3.0 - 2.0 * f);
-            return mix(a, b, u.x) +
-                (c - a) * u.y * (1.0 - u.x) +
-                (d - b) * u.x * u.y;
-        }
-
-        float pinkNoise(vec2 p) {
-            float value = 0.0;
-            float amplitude = 1.0;
-            float frequency = 1.0;
-            for (int i = 0; i < 5; i += 1) {
-                value += noise2d(p * frequency) * amplitude;
-                frequency *= 2.0;
-                amplitude *= 0.5;
-            }
-            return value;
-        }
-
-        void main() {
-            vec4 color = texture2D(tDiffuse, vUv);
-            vec2 uv = vUv * uScale + uTime * uSpeed;
-            float pink = pinkNoise(uv);
-            float noise = pink - 0.5;
-            color.rgb += noise * uAmount;
-            gl_FragColor = color;
-        }
-    `
-}
 
 const camera = new THREE.PerspectiveCamera(
     90,
@@ -103,13 +40,14 @@ const directional = new THREE.DirectionalLight(0xffffff, 0.8)
 directional.position.set(2, 3, 4)
 scene.add(ambient, directional)
 
-const letterFillAlpha = 0.75
+const sphereLetterAlpha = 1.0
+const sphereGridAlpha = 1
 const colorState = {
     background: '#565656',
     sphereColor: '#7d7d7d',
-    sphereLetters: '#ffffff',
+    sphereLetters: '#cccccc',
     spiralPlane: '#687a82',
-    spiralLetters: '#ffffff'
+    spiralLetters: '#cccccc'
 }
 const typographyState = {
     fontFamily: 'Roboto'
@@ -122,8 +60,8 @@ const toRgba = (hex : string, alpha : number) => {
     return `rgba(${ r },${ g },${ b },${ alpha })`
 }
 scene.background = new THREE.Color(colorState.background)
-const letterColor = toRgba(colorState.sphereLetters, letterFillAlpha)
-const gridColor = toRgba(colorState.sphereLetters, letterFillAlpha)
+const letterColor = toRgba(colorState.sphereLetters, sphereLetterAlpha)
+const gridColor = toRgba(colorState.sphereLetters, sphereGridAlpha)
 
 const sharedSurface = {
     roughness: 0.6,
@@ -167,7 +105,7 @@ scene.add(spiralPlane)
 
 const composer = new EffectComposer(renderer)
 composer.addPass(new RenderPass(scene, camera))
-const noisePass = new ShaderPass(noiseShader)
+const noisePass = new ShaderPass(createNoiseShader(0.061125, 2.8, 0.12))
 composer.addPass(noisePass)
 
 const gui = new GUI({ title: 'Inspector' })
@@ -186,7 +124,10 @@ colorFolder
     .addColor(colorState, 'sphereLetters')
     .name('Sphere Letters')
     .onChange((value : string) =>
-        setSphereLetterColor(toRgba(value, letterFillAlpha), toRgba(value, letterFillAlpha))
+        setSphereLetterColor(
+            toRgba(value, sphereLetterAlpha),
+            toRgba(value, sphereGridAlpha)
+        )
     )
 colorFolder
     .addColor(colorState, 'spiralPlane')
