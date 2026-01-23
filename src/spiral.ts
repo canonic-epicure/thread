@@ -20,15 +20,15 @@ type SpiralController = {
     ) => void
 }
 
-const PLANE_SIZE = 25
+const PLANE_SIZE = 15
 const PLANE_SEGMENTS = 350
 const DEPRESSION_RADIUS = 3.1
 const DEPRESSION_DEPTH = 15.4
 const DEPRESSION_FALLOFF = 18
 
-const SPIRAL_TURNS = 51
-const SPIRAL_FLOW_SPEED = 0.0003
-const SPIRAL_LETTER_COUNT = SPIRAL_TURNS * 100
+const SPIRAL_TURNS = 30
+const SPIRAL_FLOW_SPEED = 0.0005
+const SPIRAL_LETTER_COUNT = SPIRAL_TURNS * 91 + 15
 const SPIRAL_ALPHA_EDGE = 0
 const SPIRAL_ALPHA_CENTER = 1.0
 
@@ -42,6 +42,12 @@ type SpiralSlot = {
     originalIndex: number
     alteredIndex: number
     displacedIndex: number
+    originalBaseT: number
+    displacedBaseT: number
+    originalBaseCos: number
+    originalBaseSin: number
+    displacedBaseCos: number
+    displacedBaseSin: number
 }
 
 const SPIRAL_TEXT_CHARS = Array.from(LONG_TEXT)
@@ -88,7 +94,13 @@ function createSpiralSlots(generator: Generator<string>): SpiralSlot[] {
                 -SPIRAL_STRING_OFFSET_RADIUS,
                 SPIRAL_STRING_OFFSET_RADIUS
             ),
-        displacedIndex: 0
+        displacedIndex: 0,
+        originalBaseT: 0,
+        displacedBaseT: 0,
+        originalBaseCos: 0,
+        originalBaseSin: 0,
+        displacedBaseCos: 0,
+        displacedBaseSin: 0
     }))
 }
 
@@ -98,6 +110,24 @@ function assignDisplacedIndices(slots: SpiralSlot[]): void {
         .sort((a, b) => a.alteredIndex - b.alteredIndex)
     displacedOrder.forEach((slot, index) => {
         slot.displacedIndex = index
+    })
+}
+
+function precomputeSpiralBases(slots: SpiralSlot[]): void {
+    const total = SPIRAL_LETTER_COUNT
+    const angleScale = SPIRAL_TURNS * Math.PI * 2
+
+    slots.forEach((slot) => {
+        slot.originalBaseT = slot.originalIndex / total
+        slot.displacedBaseT = slot.displacedIndex / total
+
+        const originalAngle = angleScale * slot.originalBaseT
+        slot.originalBaseCos = Math.cos(originalAngle)
+        slot.originalBaseSin = Math.sin(originalAngle)
+
+        const displacedAngle = angleScale * slot.displacedBaseT
+        slot.displacedBaseCos = Math.cos(displacedAngle)
+        slot.displacedBaseSin = Math.sin(displacedAngle)
     })
 }
 
@@ -142,13 +172,16 @@ function createDepressedPlane(
 
 export function createSpiralController(options: SpiralControllerOptions): SpiralController {
     const plane = createDepressedPlane(options.materialParams, options.planeColor)
+    const half = PLANE_SIZE / 2
+    const radialStep = half
     const spiralCharGenerator = createSpiralCharGenerator(SPIRAL_TEXT_CHARS)
     const spiralSlots = createSpiralSlots(spiralCharGenerator)
     assignDisplacedIndices(spiralSlots)
+    precomputeSpiralBases(spiralSlots)
 
     const spiralCanvas = document.createElement('canvas')
-    spiralCanvas.width = 4096
-    spiralCanvas.height = 4096
+    spiralCanvas.width = 2048
+    spiralCanvas.height = 2048
     const spiralCtx = spiralCanvas.getContext('2d')
     if (!spiralCtx) {
         throw new Error('Failed to get 2D context')
@@ -180,7 +213,6 @@ export function createSpiralController(options: SpiralControllerOptions): Spiral
     plane.add(spiralOverlay)
 
     let spiralProgress = 0
-    const half = PLANE_SIZE / 2
 
     const letterColor = new THREE.Color(options.letterColor)
     const letterRgb = {
@@ -236,22 +268,36 @@ export function createSpiralController(options: SpiralControllerOptions): Spiral
         const smoothing = 1 - Math.exp(-delta / duration)
         blend += (blendTarget - blend) * smoothing
 
-        const total = SPIRAL_LETTER_COUNT
+        const angleDelta = SPIRAL_TURNS * Math.PI * 2 * spiralProgress
+        const cosDelta = Math.cos(angleDelta)
+        const sinDelta = Math.sin(angleDelta)
 
         for (let i = 0; i < SPIRAL_LETTER_COUNT; i += 1) {
             const entry = spiralSlots[i]
-            const tOriginal = (entry.originalIndex / total + spiralProgress) % 1
-            const tDisplaced = (entry.displacedIndex / total + spiralProgress) % 1
+            let tOriginal = entry.originalBaseT + spiralProgress
+            if (tOriginal >= 1) {
+                tOriginal -= 1
+            }
+            let tDisplaced = entry.displacedBaseT + spiralProgress
+            if (tDisplaced >= 1) {
+                tDisplaced -= 1
+            }
 
-            const radiusOriginal = half - tOriginal * (half - 0.2)
-            const angleOriginal = SPIRAL_TURNS * Math.PI * 2 * tOriginal
-            const xOriginal = radiusOriginal * Math.cos(angleOriginal)
-            const yOriginal = radiusOriginal * Math.sin(angleOriginal)
+            const radiusOriginal = half - tOriginal * radialStep
+            const cosOriginal =
+                entry.originalBaseCos * cosDelta - entry.originalBaseSin * sinDelta
+            const sinOriginal =
+                entry.originalBaseSin * cosDelta + entry.originalBaseCos * sinDelta
+            const xOriginal = radiusOriginal * cosOriginal
+            const yOriginal = radiusOriginal * sinOriginal
 
-            const radiusDisplaced = half - tDisplaced * (half - 0.2)
-            const angleDisplaced = SPIRAL_TURNS * Math.PI * 2 * tDisplaced
-            const xDisplaced = radiusDisplaced * Math.cos(angleDisplaced)
-            const yDisplaced = radiusDisplaced * Math.sin(angleDisplaced)
+            const radiusDisplaced = half - tDisplaced * radialStep
+            const cosDisplaced =
+                entry.displacedBaseCos * cosDelta - entry.displacedBaseSin * sinDelta
+            const sinDisplaced =
+                entry.displacedBaseSin * cosDelta + entry.displacedBaseCos * sinDelta
+            const xDisplaced = radiusDisplaced * cosDisplaced
+            const yDisplaced = radiusDisplaced * sinDisplaced
 
             const x = xDisplaced + (xOriginal - xDisplaced) * blend
             const y = yDisplaced + (yOriginal - yDisplaced) * blend
