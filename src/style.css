@@ -1,13 +1,26 @@
 html,
 body,
 #app {
-  margin: 0;
-  width: 100%;
-  height: 100%;
-  overflow: hidden;
-  background: #0b0b0b;
+    margin: 0;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    background: #0b0b0b;
+    position: relative;
 }
 
 canvas {
-  display: block;
+    display: block;
+}
+
+.soundcloud-player {
+    position: absolute;
+    right: 16px;
+    bottom: 16px;
+    width: 320px;
+    height: 80px;
+    border-radius: 8px;
+    overflow: hidden;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+    opacity: 0.92;
 }

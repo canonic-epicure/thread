@@ -3,14 +3,21 @@ import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer
 import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js'
 import { ShaderPass } from 'three/examples/jsm/postprocessing/ShaderPass.js'
 import GUI from 'lil-gui'
-import { createSphereController } from './sphere'
-import { createSpiralController } from './spiral'
+import { createSphereController } from './sphere.js'
+import { createSpiralController } from './spiral.js'
+import { initSoundCloud } from './sound'
 import './style.css'
 
 const app = document.querySelector<HTMLDivElement>('#app')
 if (!app) {
     throw new Error('Missing #app element')
 }
+
+initSoundCloud(app, {
+    trackUrl:
+        'https://soundcloud.com/shawn-scarber/drawing-by-tomasz-bednarczyk-stretched',
+    startMs: 45000
+})
 
 const renderer = new THREE.WebGLRenderer({ antialias: true })
 renderer.setPixelRatio(window.devicePixelRatio)
