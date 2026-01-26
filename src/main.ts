@@ -5,10 +5,10 @@ import { ShaderPass } from 'three/examples/jsm/postprocessing/ShaderPass.js'
 import GUI from 'lil-gui'
 import { createSphereController } from './sphere.js'
 import { createSpiralController } from './spiral.js'
-import { initSoundCloud } from './sound'
+import { initSoundCloud } from './sound.js'
 import { createNoiseShader } from './noise'
-import { DEFAULT_LONG_TEXT } from './text'
-import { LlmTextStream, TextStreamBuffer } from './text-stream'
+import { DEFAULT_LONG_TEXT } from './text.js'
+import { LlmTextStream, TextStreamBuffer } from './text-stream.js'
 import './style.css'
 
 const app = document.querySelector<HTMLDivElement>('#app')

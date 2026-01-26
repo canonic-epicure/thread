@@ -1,8 +1,8 @@
+import { DEFAULT_TEXT } from "./text.js";
 const defaultConfig = {
     endpoint: 'http://localhost:8787/api/stream',
-    prompt: 'Write an endless, poetic stream of short words and phrases. ' +
-        'Avoid line breaks. Keep it uppercase. Use letters, spaces, and a few digits.',
-    model: 'meta-llama/llama-3.1-8b-instruct:free',
+    prompt: 'Write an endless, poetic stream of short words and phrases on topic: \n' + DEFAULT_TEXT +
+        '\nAvoid line breaks. Keep it uppercase',
     temperature: 0.8,
     maxTokens: 512,
     maxLength: 80000,

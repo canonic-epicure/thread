@@ -5,19 +5,19 @@ import { ShaderPass } from 'three/examples/jsm/postprocessing/ShaderPass.js';
 import GUI from 'lil-gui';
 import { createSphereController } from './sphere.js';
 import { createSpiralController } from './spiral.js';
-import { initSoundCloud } from './sound';
+import { initSoundCloud } from './sound.js';
 import { createNoiseShader } from './noise';
-import { DEFAULT_LONG_TEXT } from './text';
-import { LlmTextStream, TextStreamBuffer } from './text-stream';
+import { DEFAULT_LONG_TEXT } from './text.js';
+import { LlmTextStream, TextStreamBuffer } from './text-stream.js';
 import './style.css';
 const app = document.querySelector('#app');
 if (!app) {
     throw new Error('Missing #app element');
 }
-initSoundCloud(app, {
-    trackUrl: 'https://soundcloud.com/shawn-scarber/drawing-by-tomasz-bednarczyk-stretched',
-    startMs: 45000
-});
+// initSoundCloud(app, {
+//     trackUrl: 'https://soundcloud.com/shawn-scarber/drawing-by-tomasz-bednarczyk-stretched',
+//     startMs: 45000
+// })
 const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setPixelRatio(window.devicePixelRatio);
 renderer.setSize(window.innerWidth, window.innerHeight);
@@ -62,7 +62,7 @@ const baseMaterialParams = {
     roughness: sharedSurface.roughness,
     metalness: sharedSurface.metalness
 };
-const textBuffer = new TextStreamBuffer(DEFAULT_LONG_TEXT, 80000);
+const textBuffer = new TextStreamBuffer('', 10000);
 const { sphere, updateSphere, getSphereState, setSphereColor, setSphereLetterColor, setSphereFont, setSphereText } = createSphereController({
     renderer,
     camera,
