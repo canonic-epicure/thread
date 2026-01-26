@@ -7,6 +7,8 @@ import { createSphereController } from './sphere.js'
 import { createSpiralController } from './spiral.js'
 import { initSoundCloud } from './sound'
 import { createNoiseShader } from './noise'
+import { DEFAULT_LONG_TEXT } from './text'
+import { LlmTextStream, TextStreamBuffer } from './text-stream'
 import './style.css'
 
 const app = document.querySelector<HTMLDivElement>('#app')
@@ -76,14 +78,25 @@ const baseMaterialParams = {
     metalness: sharedSurface.metalness
 }
 
-const { sphere, updateSphere, getSphereState, setSphereColor, setSphereLetterColor, setSphereFont } =
+const textBuffer = new TextStreamBuffer(DEFAULT_LONG_TEXT, 80000)
+
+const {
+    sphere,
+    updateSphere,
+    getSphereState,
+    setSphereColor,
+    setSphereLetterColor,
+    setSphereFont,
+    setSphereText
+} =
     createSphereController({
         renderer,
         camera,
         materialParams: baseMaterialParams,
         letterColor,
         gridColor,
-        fontFamily: typographyState.fontFamily
+        fontFamily: typographyState.fontFamily,
+        text: textBuffer.getText()
     })
 scene.add(sphere)
 setSphereColor(colorState.sphereColor)
@@ -93,15 +106,36 @@ const {
     updateSpiral,
     setSpiralPlaneColor,
     setSpiralLetterColor,
-    setSpiralFont
+    setSpiralFont,
+    setSpiralText
 } = createSpiralController({
     renderer,
     materialParams: baseMaterialParams,
     planeColor: Number.parseInt(colorState.spiralPlane.replace('#', ''), 16),
     letterColor: Number.parseInt(colorState.spiralLetters.replace('#', ''), 16),
-    fontFamily: typographyState.fontFamily
+    fontFamily: typographyState.fontFamily,
+    text: textBuffer.getText()
 })
 scene.add(spiralPlane)
+
+const textStream = new LlmTextStream(
+    textBuffer,
+    {
+        maxLength: 80000,
+        refillThreshold: 40000,
+        minUpdateIntervalMs: 1000
+    },
+    {
+        onUpdate: (nextText) => {
+            setSphereText(nextText)
+            setSpiralText(nextText)
+        },
+        onError: (error) => {
+            console.warn('Text stream error', error)
+        }
+    }
+)
+textStream.start()
 
 const composer = new EffectComposer(renderer)
 composer.addPass(new RenderPass(scene, camera))

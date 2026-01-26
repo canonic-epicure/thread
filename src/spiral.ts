@@ -1,5 +1,4 @@
 import * as THREE from 'three'
-import { LONG_TEXT, TEXT } from './text'
 
 type SpiralControllerOptions = {
     renderer: THREE.WebGLRenderer
@@ -11,6 +10,7 @@ type SpiralControllerOptions = {
     planeColor: number
     letterColor: number
     fontFamily: string
+    text: string
 }
 
 type SpiralController = {
@@ -22,6 +22,7 @@ type SpiralController = {
     setSpiralPlaneColor: (color: string | number) => void
     setSpiralLetterColor: (color: string | number) => void
     setSpiralFont: (fontFamily: string) => void
+    setSpiralText: (text: string) => void
 }
 
 const PLANE_SIZE = 15
@@ -108,7 +109,6 @@ type PlaneLensVisual = {
     update: (lenses: PlaneLens[]) => void
 }
 
-const SPIRAL_TEXT_CHARS = Array.from(LONG_TEXT)
 const SPIRAL_STRING_OFFSET_RADIUS = 15
 const SPIRAL_OFFSET_RANGE = SPIRAL_STRING_OFFSET_RADIUS * 2 + 1
 const SPIRAL_OFFSET_STD_DEV = SPIRAL_STRING_OFFSET_RADIUS * 0.6
@@ -130,6 +130,13 @@ function* createSpiralCharGenerator(chars: string[]): Generator<string> {
         yield chars[index]
         index = (index + 1) % chars.length
     }
+}
+
+function toSafeChars(text: string): string[] {
+    if (!text) {
+        return [' ']
+    }
+    return Array.from(text)
 }
 
 function sampleGaussianOffset(
@@ -458,12 +465,14 @@ export function createSpiralController(options: SpiralControllerOptions): Spiral
     particleSystem.object.renderOrder = 1
     plane.add(particleSystem.object)
     // Lens visuals removed; keep only letter distortion.
-    const spiralCharGenerator = createSpiralCharGenerator(SPIRAL_TEXT_CHARS)
+    let currentText = options.text
+    let spiralTextChars = toSafeChars(currentText)
+    let spiralCharGenerator = createSpiralCharGenerator(spiralTextChars)
     const spiralSlots = createSpiralSlots(spiralCharGenerator)
     assignDisplacedIndices(spiralSlots)
 
     let currentFontFamily = options.fontFamily
-    let glyphAtlas = createGlyphAtlas(Array.from(TEXT), currentFontFamily)
+    let glyphAtlas = createGlyphAtlas(spiralTextChars, currentFontFamily)
     glyphAtlas.texture.anisotropy = Math.min(
         8,
         options.renderer.capabilities.getMaxAnisotropy()
@@ -732,8 +741,13 @@ export function createSpiralController(options: SpiralControllerOptions): Spiral
     const lensRadiusUniform = spiralMaterial.uniforms.uLensRadius.value as number[]
     const lensStrengthUniform = spiralMaterial.uniforms.uLensStrength.value as number[]
 
-    const rebuildGlyphAtlas = () => {
-        const nextAtlas = createGlyphAtlas(Array.from(TEXT), currentFontFamily)
+    const getAtlasChars = () =>
+        Array.from(
+            new Set([...spiralTextChars, ...spiralSlots.map((slot) => slot.char)])
+        )
+
+    const rebuildGlyphAtlas = (chars: string[]) => {
+        const nextAtlas = createGlyphAtlas(chars, currentFontFamily)
         nextAtlas.texture.anisotropy = Math.min(
             8,
             options.renderer.capabilities.getMaxAnisotropy()
@@ -856,7 +870,16 @@ export function createSpiralController(options: SpiralControllerOptions): Spiral
         },
         setSpiralFont: (fontFamily: string) => {
             currentFontFamily = fontFamily
-            rebuildGlyphAtlas()
+            rebuildGlyphAtlas(getAtlasChars())
+        },
+        setSpiralText: (nextText: string) => {
+            if (nextText === currentText) {
+                return
+            }
+            currentText = nextText
+            spiralTextChars = toSafeChars(currentText)
+            spiralCharGenerator = createSpiralCharGenerator(spiralTextChars)
+            rebuildGlyphAtlas(getAtlasChars())
         }
     }
 }

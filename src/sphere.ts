@@ -8,7 +8,6 @@
       back to the default auto-scroll speed over time.
 */
 import * as THREE from 'three'
-import { LONG_TEXT } from './text'
 
 type SphereControllerOptions = {
     renderer: THREE.WebGLRenderer
@@ -21,6 +20,7 @@ type SphereControllerOptions = {
     letterColor: string
     gridColor: string
     fontFamily: string
+    text: string
 }
 
 type SphereController = {
@@ -30,6 +30,7 @@ type SphereController = {
     setSphereColor: (color: string | number) => void
     setSphereLetterColor: (letterColor: string, gridColor?: string) => void
     setSphereFont: (fontFamily: string) => void
+    setSphereText: (text: string) => void
 }
 
 // Grid layout for the sphere texture (rectangular cells wrapped onto the sphere).
@@ -53,13 +54,15 @@ const sphereResumeTime = 2.0
 
 // Builds the 2D canvas that becomes the sphere texture.
 // The grid is drawn first, then letters are placed in each cell.
-// Each column uses a shifted index into LONG_TEXT so columns differ but loop consistently.
+// Each column uses a shifted index into the text buffer so columns differ but loop consistently.
 function createSphereTexture(
     renderer: THREE.WebGLRenderer,
     letterColor: string,
     gridColor: string,
-    fontFamily: string
+    fontFamily: string,
+    text: string
 ): THREE.CanvasTexture {
+    const safeText = text.length > 0 ? text : ' '
     const size = SPHERE_TEXTURE_SIZE
     const canvas = document.createElement('canvas')
     canvas.width = size
@@ -98,10 +101,10 @@ function createSphereTexture(
 
     for (let col = 0; col < SPHERE_COLUMN_COUNT; col += 1) {
         // Column-based offset creates a vertical "text stream" per column.
-        const columnOffset = (col * 7) % LONG_TEXT.length
+        const columnOffset = (col * 7) % safeText.length
         for (let row = 0; row < SPHERE_ROW_COUNT; row += 1) {
-            const index = (columnOffset + row) % LONG_TEXT.length
-            const char = LONG_TEXT[index]
+            const index = (columnOffset + row) % safeText.length
+            const char = safeText[index]
             const cx = col * cellWidth + cellWidth / 2
             const cy = row * cellHeight + cellHeight / 2
             if (col === Math.floor(SPHERE_COLUMN_COUNT / 4)) {
@@ -130,15 +133,18 @@ function createSphereTexture(
 }
 
 export function createSphereController(options: SphereControllerOptions): SphereController {
-    const { renderer, camera, materialParams, letterColor, gridColor, fontFamily } = options
+    const { renderer, camera, materialParams, letterColor, gridColor, fontFamily, text } =
+        options
     let currentLetterColor = letterColor
     let currentGridColor = gridColor
     let currentFontFamily = fontFamily
+    let currentText = text
     let texture = createSphereTexture(
         renderer,
         currentLetterColor,
         currentGridColor,
-        currentFontFamily
+        currentFontFamily,
+        currentText
     )
     // Repeat wrapping allows endless vertical scrolling on the sphere.
     texture.wrapS = THREE.RepeatWrapping
@@ -170,7 +176,8 @@ export function createSphereController(options: SphereControllerOptions): Sphere
             renderer,
             currentLetterColor,
             currentGridColor,
-            currentFontFamily
+            currentFontFamily,
+            currentText
         )
         nextTexture.wrapS = THREE.RepeatWrapping
         nextTexture.wrapT = THREE.RepeatWrapping
@@ -288,6 +295,13 @@ export function createSphereController(options: SphereControllerOptions): Sphere
         },
         setSphereFont: (nextFontFamily: string) => {
             currentFontFamily = nextFontFamily
+            rebuildTexture()
+        },
+        setSphereText: (nextText: string) => {
+            if (nextText === currentText) {
+                return
+            }
+            currentText = nextText
             rebuildTexture()
         }
     }
