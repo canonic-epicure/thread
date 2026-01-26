@@ -16,10 +16,10 @@ if (!app) {
     throw new Error('Missing #app element')
 }
 
-initSoundCloud(app, {
-    trackUrl: 'https://soundcloud.com/shawn-scarber/drawing-by-tomasz-bednarczyk-stretched',
-    startMs: 45000
-})
+// initSoundCloud(app, {
+//     trackUrl: 'https://soundcloud.com/shawn-scarber/drawing-by-tomasz-bednarczyk-stretched',
+//     startMs: 45000
+// })
 
 const renderer = new THREE.WebGLRenderer({ antialias: true })
 renderer.setPixelRatio(window.devicePixelRatio)
@@ -78,7 +78,7 @@ const baseMaterialParams = {
     metalness: sharedSurface.metalness
 }
 
-const textBuffer = new TextStreamBuffer(DEFAULT_LONG_TEXT, 80000)
+const textBuffer = new TextStreamBuffer('', 10000)
 
 const {
     sphere,
