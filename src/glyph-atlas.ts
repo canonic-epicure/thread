@@ -21,7 +21,6 @@ export class GlyphAtlas {
     private canvas: HTMLCanvasElement
     private ctx: CanvasRenderingContext2D
     private glyphsByIndex: string[]
-    private nextIndex: number
     private fontFamily: string
 
     constructor(fontFamily: string, options?: GlyphAtlasOptions) {
@@ -30,7 +29,6 @@ export class GlyphAtlas {
         this.fontFamily = fontFamily
         this.glyphMap = new Map<string, number>()
         this.glyphsByIndex = []
-        this.nextIndex = 0
 
         this.canvas = document.createElement('canvas')
         this.canvas.width = this.columns * GLYPH_CELL_SIZE
@@ -71,22 +69,25 @@ export class GlyphAtlas {
 
     ensureChars(chars: string[]): boolean {
         let added = false
+        let capacityReached = false
         for (const char of chars) {
             if (this.glyphMap.has(char)) {
                 continue
             }
-            if (this.nextIndex >= this.columns * this.rows) {
-                console.warn(
-                    `GlyphAtlas is full (${this.columns}x${this.rows}). Skipping new glyphs.`
-                )
-                break
+            const nextIndex = this.glyphsByIndex.length
+            if (nextIndex >= this.columns * this.rows) {
+                capacityReached = true
+                continue
             }
-            const index = this.nextIndex
-            this.nextIndex += 1
-            this.glyphMap.set(char, index)
-            this.glyphsByIndex[index] = char
-            this.drawGlyph(char, index)
+            this.glyphMap.set(char, nextIndex)
+            this.glyphsByIndex[nextIndex] = char
+            this.drawGlyph(char, nextIndex)
             added = true
+        }
+        if (capacityReached) {
+            console.warn(
+                `GlyphAtlas is full (${this.columns}x${this.rows}). Skipping new glyphs.`
+            )
         }
         if (added) {
             this.texture.needsUpdate = true
