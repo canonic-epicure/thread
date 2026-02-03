@@ -49,7 +49,7 @@ const colorState = {
     sphereColor: '#7d7d7d',
     sphereLetters: '#cccccc',
     spiralPlane: '#687a82',
-    spiralLetters: '#cccccc'
+    spiralLetters: '#ffffff' // #cccccc'
 }
 const typographyState = {
     fontFamily: 'Roboto'

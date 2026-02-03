@@ -27,7 +27,7 @@ const defaultConfig: TextStreamConfig = {
     minUpdateIntervalMs: 250
 }
 
-type CharSlot = {
+export type CharSlot = {
     char: string
     originalIndex: number
     shuffledIndex: number
