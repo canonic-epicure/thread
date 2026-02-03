@@ -78,7 +78,10 @@ const baseMaterialParams = {
     metalness: sharedSurface.metalness
 }
 
-const textBuffer = new TextStreamBuffer('', 10000)
+const MIXED_CHUNK_MIN_SIZE = 3
+
+const textBuffer = new TextStreamBuffer(DEFAULT_LONG_TEXT)
+textBuffer.minChunkSize = MIXED_CHUNK_MIN_SIZE
 
 const {
     sphere,
@@ -96,7 +99,7 @@ const {
         letterColor,
         gridColor,
         fontFamily: typographyState.fontFamily,
-        text: textBuffer.getText()
+        text: textBuffer.text
     })
 scene.add(sphere)
 setSphereColor(colorState.sphereColor)
@@ -106,29 +109,26 @@ const {
     updateSpiral,
     setSpiralPlaneColor,
     setSpiralLetterColor,
-    setSpiralFont,
-    setSpiralText
+    setSpiralFont
 } = createSpiralController({
     renderer,
     materialParams: baseMaterialParams,
     planeColor: Number.parseInt(colorState.spiralPlane.replace('#', ''), 16),
     letterColor: Number.parseInt(colorState.spiralLetters.replace('#', ''), 16),
     fontFamily: typographyState.fontFamily,
-    text: textBuffer.getText()
+    textBuffer
 })
 scene.add(spiralPlane)
 
 const textStream = new LlmTextStream(
     textBuffer,
     {
-        maxLength: 80000,
         refillThreshold: 40000,
         minUpdateIntervalMs: 1000
     },
     {
-        onUpdate: (nextText) => {
-            setSphereText(nextText)
-            setSpiralText(nextText)
+        onUpdate: (buffer) => {
+            setSphereText(buffer.text)
         },
         onError: (error) => {
             console.warn('Text stream error', error)

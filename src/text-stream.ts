@@ -6,13 +6,12 @@ type TextStreamConfig = {
     model?: string
     temperature: number
     maxTokens: number
-    maxLength: number
     refillThreshold: number
     minUpdateIntervalMs: number
 }
 
 type TextStreamCallbacks = {
-    onUpdate: (text: string) => void
+    onUpdate: (buffer: TextStreamBuffer) => void
     onError?: (error: Error) => void
 }
 
@@ -20,41 +19,84 @@ const defaultConfig: TextStreamConfig = {
     endpoint: 'http://localhost:8787/api/stream',
     prompt:
         'Write an endless, poetic stream of short words and phrases on topic: \n' + DEFAULT_TEXT +
+        'Do not just repeat the meanings or patterns from the topic. Let it only influence the result.' +
         '\nAvoid line breaks. Keep it uppercase',
     temperature: 0.8,
     maxTokens: 512,
-    maxLength: 80000,
     refillThreshold: 30000,
     minUpdateIntervalMs: 250
 }
 
+type CharSlot = {
+    char: string
+    originalIndex: number
+    shuffledIndex: number
+}
+
 export class TextStreamBuffer {
-    private text: string
-    private maxLength: number
+    minChunkSize: number = 500
+    shuffle_radius: number = 15
 
-    constructor(initialText: string, maxLength: number) {
-        this.text = initialText
-        this.maxLength = maxLength
-        this.enforceMaxLength()
+    pending : string = ''
+
+    uniqueChars: Set<string> = new Set([' '])
+
+    visibleChars: CharSlot[] = []
+
+    visibleStartAt: number = 0
+
+
+    constructor(initialText: string) {
+        this.append(initialText)
     }
 
-    getText(): string {
-        return this.text
+    shift() {
+        this.visibleStartAt++
+
+        if (this.visibleStartAt > this.minChunkSize) {
+            this.visibleChars = this.visibleChars.slice(this.visibleStartAt)
+            this.visibleChars.forEach(char => {
+                char.originalIndex -= this.visibleStartAt
+                char.shuffledIndex -= this.visibleStartAt
+            })
+            this.visibleStartAt = 0
+        }
     }
+
+
+    get text(): string {
+        return this.visibleChars.slice(this.visibleStartAt).map(char => char.char).join('')
+    }
+
+    get length(): number {
+        return this.visibleChars.length - this.visibleStartAt
+    }
+
 
     append(chunk: string): void {
-        if (!chunk) return
-        this.text += sanitizeText(chunk)
-        this.enforceMaxLength()
-    }
+        const sanitized = sanitizeText(chunk)
+        if (!sanitized) return
 
-    isBelowThreshold(threshold: number): boolean {
-        return this.text.length < threshold
-    }
+        for (const char of sanitized) {
+            this.uniqueChars.add(char)
+        }
 
-    private enforceMaxLength() {
-        if (this.text.length > this.maxLength) {
-            this.text = this.text.slice(-this.maxLength)
+        this.pending += sanitized
+
+        if (this.pending.length > this.minChunkSize) {
+            const chars = Array.from(this.pending)
+                .map((char, index): CharSlot => ({ char, originalIndex: index, shuffledIndex: index + Math.floor(Math.random() * this.shuffle_radius * 2) - this.shuffle_radius }))
+
+            chars.sort((a, b) => a.shuffledIndex - b.shuffledIndex)
+
+            chars.forEach((char, index) => {
+                char.originalIndex = char.originalIndex + this.visibleChars.length
+                char.shuffledIndex = index + this.visibleChars.length
+            })
+
+            this.visibleChars.push(...chars)
+
+            this.pending = ''
         }
     }
 }
@@ -93,7 +135,7 @@ export class LlmTextStream {
 
     private ensureStreaming() {
         if (this.streaming) return
-        if (!this.buffer.isBelowThreshold(this.config.refillThreshold)) return
+        if (this.buffer.length >= this.config.refillThreshold) return
         void this.streamOnce()
     }
 
@@ -101,7 +143,7 @@ export class LlmTextStream {
         const now = performance.now()
         if (now - this.lastUpdate < this.config.minUpdateIntervalMs) return
         this.lastUpdate = now
-        this.callbacks.onUpdate(this.buffer.getText())
+        this.callbacks.onUpdate(this.buffer)
     }
 
     private async streamOnce() {
@@ -130,7 +172,7 @@ export class LlmTextStream {
             this.scheduleRetry(2000)
         } finally {
             this.streaming = false
-            if (this.buffer.isBelowThreshold(this.config.refillThreshold)) {
+            if (this.buffer.length < this.config.refillThreshold) {
                 this.scheduleRetry(500)
             }
         }
@@ -183,4 +225,15 @@ export class LlmTextStream {
 
 function sanitizeText(value: string): string {
     return value.replace(/\s+/g, ' ').toUpperCase()
+}
+
+function shuffleString(value: string): string {
+    const chars = Array.from(value)
+    for (let i = chars.length - 1; i > 0; i -= 1) {
+        const j = Math.floor(Math.random() * (i + 1))
+        const temp = chars[i]
+        chars[i] = chars[j]
+        chars[j] = temp
+    }
+    return chars.join('')
 }

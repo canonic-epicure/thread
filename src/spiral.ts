@@ -1,4 +1,5 @@
 import * as THREE from 'three'
+import type { TextStreamBuffer } from './text-stream.js'
 
 type SpiralControllerOptions = {
     renderer: THREE.WebGLRenderer
@@ -10,7 +11,7 @@ type SpiralControllerOptions = {
     planeColor: number
     letterColor: number
     fontFamily: string
-    text: string
+    textBuffer: TextStreamBuffer
 }
 
 type SpiralController = {
@@ -22,7 +23,6 @@ type SpiralController = {
     setSpiralPlaneColor: (color: string | number) => void
     setSpiralLetterColor: (color: string | number) => void
     setSpiralFont: (fontFamily: string) => void
-    setSpiralText: (text: string) => void
 }
 
 const PLANE_SIZE = 15
@@ -33,14 +33,14 @@ const DEPRESSION_FALLOFF = 18
 
 const SPIRAL_TURNS = 51
 const SPIRAL_FLOW_SPEED = 0.0002
-const SPIRAL_LETTER_COUNT = SPIRAL_TURNS * 91 + 15
+export const SPIRAL_VISIBLE_TEXT_LENGTH = SPIRAL_TURNS * 91 + 15
+const SPIRAL_LETTER_COUNT = SPIRAL_VISIBLE_TEXT_LENGTH
 const SPIRAL_ALPHA_EDGE = 0
 const SPIRAL_ALPHA_CENTER = 1.0
 
 const SPIRAL_RETURN_DELAY = 0.6
 const SPIRAL_RETURN_DURATION = 7
 const SPIRAL_RELEASE_DURATION = 7
-const SPIRAL_STOP_THRESHOLD = 0.01
 
 const PLANE_PARTICLE_COUNT = 30
 const PLANE_PARTICLE_SPEED_MIN = 0.6
@@ -72,11 +72,10 @@ const PLANE_LENS_LIFE_MAX = 7.5
 const PLANE_LENS_FADE_IN = 0.5
 const PLANE_LENS_FADE_OUT = 0.5
 
-type SpiralSlot = {
+type BufferCharSlot = {
     char: string
     originalIndex: number
-    alteredIndex: number
-    displacedIndex: number
+    shuffledIndex: number
 }
 
 type GlyphAtlas = {
@@ -109,49 +108,10 @@ type PlaneLensVisual = {
     update: (lenses: PlaneLens[]) => void
 }
 
-const SPIRAL_STRING_OFFSET_RADIUS = 15
-const SPIRAL_OFFSET_RANGE = SPIRAL_STRING_OFFSET_RADIUS * 2 + 1
-const SPIRAL_OFFSET_STD_DEV = SPIRAL_STRING_OFFSET_RADIUS * 0.6
-
 const GLYPH_CELL_SIZE = 64
 const GLYPH_FONT_SIZE = 64
 const GLYPH_ATLAS_COLUMNS = 16
 const LETTER_SIZE = (PLANE_SIZE * 18) / 4096
-
-function* createSpiralCharGenerator(chars: string[]): Generator<string> {
-    if (chars.length === 0) {
-        while (true) {
-            yield ' '
-        }
-    }
-
-    let index = 0
-    while (true) {
-        yield chars[index]
-        index = (index + 1) % chars.length
-    }
-}
-
-function toSafeChars(text: string): string[] {
-    if (!text) {
-        return [' ']
-    }
-    return Array.from(text)
-}
-
-function sampleGaussianOffset(
-    stdDev: number,
-    min: number,
-    max: number
-): number {
-    let u = 0
-    let v = 0
-    while (u === 0) u = Math.random()
-    while (v === 0) v = Math.random()
-    const gaussian = Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v)
-    const value = Math.round(gaussian * stdDev)
-    return Math.max(min, Math.min(max, value))
-}
 
 function createGlyphAtlas(chars: string[], fontFamily: string): GlyphAtlas {
     const uniqueChars = Array.from(new Set(chars))
@@ -192,30 +152,6 @@ function createGlyphAtlas(chars: string[], fontFamily: string): GlyphAtlas {
     texture.needsUpdate = true
 
     return { texture, glyphMap, columns, rows }
-}
-
-function createSpiralSlots(generator: Generator<string>): SpiralSlot[] {
-    return Array.from({ length: SPIRAL_LETTER_COUNT }, (_, index) => ({
-        char: generator.next().value ?? ' ',
-        originalIndex: index,
-        alteredIndex:
-            index +
-            sampleGaussianOffset(
-                SPIRAL_OFFSET_STD_DEV,
-                -SPIRAL_STRING_OFFSET_RADIUS,
-                SPIRAL_STRING_OFFSET_RADIUS
-            ),
-        displacedIndex: 0
-    }))
-}
-
-function assignDisplacedIndices(slots: SpiralSlot[]): void {
-    const displacedOrder = slots
-        .slice()
-        .sort((a, b) => a.alteredIndex - b.alteredIndex)
-    displacedOrder.forEach((slot, index) => {
-        slot.displacedIndex = index
-    })
 }
 
 function getPlaneHeightAt(x: number, y: number): number {
@@ -465,14 +401,17 @@ export function createSpiralController(options: SpiralControllerOptions): Spiral
     particleSystem.object.renderOrder = 1
     plane.add(particleSystem.object)
     // Lens visuals removed; keep only letter distortion.
-    let currentText = options.text
-    let spiralTextChars = toSafeChars(currentText)
-    let spiralCharGenerator = createSpiralCharGenerator(spiralTextChars)
-    const spiralSlots = createSpiralSlots(spiralCharGenerator)
-    assignDisplacedIndices(spiralSlots)
+    const textBuffer = options.textBuffer
+    let lastVisibleCount = textBuffer.visibleChars.length
+    let lastVisibleStartAt = textBuffer.visibleStartAt
+    let lastUniqueCount = textBuffer.uniqueChars.size
+    let needsInitialFill = true
 
     let currentFontFamily = options.fontFamily
-    let glyphAtlas = createGlyphAtlas(spiralTextChars, currentFontFamily)
+    let glyphAtlas = createGlyphAtlas(
+        Array.from(textBuffer.uniqueChars),
+        currentFontFamily
+    )
     glyphAtlas.texture.anisotropy = Math.min(
         8,
         options.renderer.capabilities.getMaxAnisotropy()
@@ -484,10 +423,9 @@ export function createSpiralController(options: SpiralControllerOptions): Spiral
     let fallbackGlyph = glyphAtlas.glyphMap.get(' ') ?? 0
 
     for (let i = 0; i < total; i += 1) {
-        const slot = spiralSlots[i]
-        originalTArray[i] = slot.originalIndex / total
-        displacedTArray[i] = slot.displacedIndex / total
-        const glyphIndex = glyphAtlas.glyphMap.get(slot.char) ?? fallbackGlyph
+        originalTArray[i] = i / total
+        displacedTArray[i] = i / total
+        const glyphIndex = fallbackGlyph
         glyphUvArray[i * 2] = glyphIndex % glyphAtlas.columns
         glyphUvArray[i * 2 + 1] = Math.floor(glyphIndex / glyphAtlas.columns)
     }
@@ -504,7 +442,9 @@ export function createSpiralController(options: SpiralControllerOptions): Spiral
     )
     spiralGeometry.setAttribute(
         'aDisplacedT',
-        new THREE.InstancedBufferAttribute(displacedTArray, 1)
+        new THREE.InstancedBufferAttribute(displacedTArray, 1).setUsage(
+            THREE.DynamicDrawUsage
+        )
     )
     const glyphAttribute = new THREE.InstancedBufferAttribute(glyphUvArray, 2)
     glyphAttribute.setUsage(THREE.DynamicDrawUsage)
@@ -741,11 +681,6 @@ export function createSpiralController(options: SpiralControllerOptions): Spiral
     const lensRadiusUniform = spiralMaterial.uniforms.uLensRadius.value as number[]
     const lensStrengthUniform = spiralMaterial.uniforms.uLensStrength.value as number[]
 
-    const getAtlasChars = () =>
-        Array.from(
-            new Set([...spiralTextChars, ...spiralSlots.map((slot) => slot.char)])
-        )
-
     const rebuildGlyphAtlas = (chars: string[]) => {
         const nextAtlas = createGlyphAtlas(chars, currentFontFamily)
         nextAtlas.texture.anisotropy = Math.min(
@@ -760,13 +695,49 @@ export function createSpiralController(options: SpiralControllerOptions): Spiral
             glyphAtlas.columns,
             glyphAtlas.rows
         )
-        for (let i = 0; i < total; i += 1) {
-            const slot = spiralSlots[i]
-            const glyphIndex = glyphAtlas.glyphMap.get(slot.char) ?? fallbackGlyph
-            glyphUvArray[i * 2] = glyphIndex % glyphAtlas.columns
-            glyphUvArray[i * 2 + 1] = Math.floor(glyphIndex / glyphAtlas.columns)
+    }
+
+    const getBufferView = () => {
+        const visible = textBuffer.visibleChars.slice(
+            textBuffer.visibleStartAt
+        ) as BufferCharSlot[]
+        const ordered = visible
+            .slice()
+            .sort((a, b) => a.originalIndex - b.originalIndex)
+        const shuffledIndexMap = new Map<BufferCharSlot, number>()
+        visible.forEach((slot, index) => {
+            shuffledIndexMap.set(slot, index)
+        })
+        return { visible, ordered, shuffledIndexMap }
+    }
+
+    const rebuildSlice = (startIndex: number, count: number) => {
+        const { ordered, shuffledIndexMap } = getBufferView()
+        const available = ordered.length
+        const pad = Math.max(0, SPIRAL_VISIBLE_TEXT_LENGTH - available)
+        for (let i = 0; i < count; i += 1) {
+            const slotIndex = (startIndex + i) % total
+            let nextChar = ' '
+            let displacedIndex = slotIndex
+            const bufferIndex = slotIndex - pad
+            if (bufferIndex >= 0 && available > 0) {
+                const source = ordered[bufferIndex % available]
+                if (source) {
+                    nextChar = source.char
+                    const shuffledIndex = shuffledIndexMap.get(source)
+                    displacedIndex =
+                        pad + (shuffledIndex ?? (bufferIndex % available))
+                }
+            }
+            displacedTArray[slotIndex] = displacedIndex / total
+            const glyphIndex = glyphAtlas.glyphMap.get(nextChar) ?? fallbackGlyph
+            glyphUvArray[slotIndex * 2] = glyphIndex % glyphAtlas.columns
+            glyphUvArray[slotIndex * 2 + 1] = Math.floor(
+                glyphIndex / glyphAtlas.columns
+            )
         }
         glyphAttribute.needsUpdate = true
+        spiralGeometry.attributes.aDisplacedT.needsUpdate = true
     }
 
     const updateSpiral = (
@@ -774,6 +745,20 @@ export function createSpiralController(options: SpiralControllerOptions): Spiral
         sphereState: { isPointerDown: boolean; scrollSpeed: number }
     ) => {
         particleSystem.update(delta)
+        let bufferDirty = false
+        if (textBuffer.uniqueChars.size !== lastUniqueCount) {
+            lastUniqueCount = textBuffer.uniqueChars.size
+            rebuildGlyphAtlas(Array.from(textBuffer.uniqueChars))
+            bufferDirty = true
+        }
+        if (
+            textBuffer.visibleChars.length !== lastVisibleCount ||
+            textBuffer.visibleStartAt !== lastVisibleStartAt
+        ) {
+            lastVisibleCount = textBuffer.visibleChars.length
+            lastVisibleStartAt = textBuffer.visibleStartAt
+            bufferDirty = true
+        }
         for (let i = 0; i < lensParticles.length; i += 1) {
             const lens = lensParticles[i]
             lens.age += delta
@@ -805,9 +790,15 @@ export function createSpiralController(options: SpiralControllerOptions): Spiral
             lensRadiusUniform[i] = lens.radius
             lensStrengthUniform[i] = lens.baseStrength * fade
         }
+        if (sphereState.isPointerDown) {
+            returnDelayRemaining = Math.max(0, returnDelayRemaining - delta)
+            blendTarget = returnDelayRemaining === 0 ? 1 : 0
+        } else {
+            returnDelayRemaining = SPIRAL_RETURN_DELAY
+            blendTarget = 0
+        }
         spiralProgress = (spiralProgress + SPIRAL_FLOW_SPEED * delta) % 1
         const progressIndex = Math.floor(spiralProgress * SPIRAL_LETTER_COUNT)
-        let glyphsUpdated = false
         if (progressIndex !== lastProgressIndex) {
             const steps =
                 (progressIndex - lastProgressIndex + SPIRAL_LETTER_COUNT) %
@@ -818,25 +809,11 @@ export function createSpiralController(options: SpiralControllerOptions): Spiral
                 const slotIndex =
                     (SPIRAL_LETTER_COUNT - lastProgressIndex) %
                     SPIRAL_LETTER_COUNT
-                const nextChar = spiralCharGenerator.next().value ?? ' '
-                spiralSlots[slotIndex].char = nextChar
-                const glyphIndex =
-                    glyphAtlas.glyphMap.get(nextChar) ?? fallbackGlyph
-                glyphUvArray[slotIndex * 2] = glyphIndex % glyphAtlas.columns
-                glyphUvArray[slotIndex * 2 + 1] = Math.floor(
-                    glyphIndex / glyphAtlas.columns
-                )
-                glyphsUpdated = true
+                textBuffer.shift()
+                rebuildSlice(slotIndex, 1)
             }
-        }
-
-        const isStopped = Math.abs(sphereState.scrollSpeed) <= SPIRAL_STOP_THRESHOLD
-        if (sphereState.isPointerDown) {
-            returnDelayRemaining = Math.max(0, returnDelayRemaining - delta)
-            blendTarget = returnDelayRemaining === 0 ? 1 : 0
-        } else {
-            returnDelayRemaining = SPIRAL_RETURN_DELAY
-            blendTarget = 0
+            lastVisibleCount = textBuffer.visibleChars.length
+            lastVisibleStartAt = textBuffer.visibleStartAt
         }
 
         const duration = blendTarget === 1 ? SPIRAL_RETURN_DURATION : SPIRAL_RELEASE_DURATION
@@ -851,8 +828,13 @@ export function createSpiralController(options: SpiralControllerOptions): Spiral
         const eased = t * t * (3 - 2 * t)
         blend = eased
 
-        if (glyphsUpdated) {
-            glyphAttribute.needsUpdate = true
+        if (bufferDirty) {
+            const dirtyCount = Math.max(lastVisibleCount, lastVisibleStartAt + 1)
+            rebuildSlice(0, Math.min(total, dirtyCount))
+        }
+        if (needsInitialFill) {
+            rebuildSlice(0, total)
+            needsInitialFill = false
         }
 
         spiralMaterial.uniforms.uSpiralProgress.value = spiralProgress
@@ -870,16 +852,8 @@ export function createSpiralController(options: SpiralControllerOptions): Spiral
         },
         setSpiralFont: (fontFamily: string) => {
             currentFontFamily = fontFamily
-            rebuildGlyphAtlas(getAtlasChars())
-        },
-        setSpiralText: (nextText: string) => {
-            if (nextText === currentText) {
-                return
-            }
-            currentText = nextText
-            spiralTextChars = toSafeChars(currentText)
-            spiralCharGenerator = createSpiralCharGenerator(spiralTextChars)
-            rebuildGlyphAtlas(getAtlasChars())
+            rebuildGlyphAtlas(Array.from(textBuffer.uniqueChars))
+            rebuildSlice(0, total)
         }
     }
 }
