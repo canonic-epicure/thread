@@ -29,7 +29,7 @@ const defaultConfig: TextStreamConfig = {
 
 export type CharSlot = {
     char: string
-    original: CharSlot
+    originalDelta: number
 }
 
 export class TextStreamBuffer {
@@ -88,11 +88,11 @@ export class TextStreamBuffer {
             chars.sort((a, b) => a.shuffled - b.shuffled)
 
             const slots = chars.map((char) : CharSlot => {
-                return { char: char.char, original : null }
+                return { char: char.char, originalDelta : 0 }
             })
 
             slots.forEach((slot, index) => {
-                slot.original = slots[ chars[index].index ]
+                slot.originalDelta = index - chars[index].index
             })
 
             this.visibleSlots.push(...slots)

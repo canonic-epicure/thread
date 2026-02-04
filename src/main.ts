@@ -129,7 +129,7 @@ const textStream = new LlmTextStream(
         }
     }
 )
-textStream.start()
+// textStream.start()
 
 const composer = new EffectComposer(renderer)
 composer.addPass(new RenderPass(scene, camera))

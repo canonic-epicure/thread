@@ -27,7 +27,7 @@ const DEPRESSION_DEPTH = 15.4
 const DEPRESSION_FALLOFF = 18
 
 const SPIRAL_TURNS = 10 //51
-const SPIRAL_FLOW_SPEED = 0.001
+const SPIRAL_FLOW_SPEED = 0.008
 const SPIRAL_VISIBLE_TEXT_LENGTH = SPIRAL_TURNS * 91 + 15
 const SPIRAL_LETTER_COUNT = SPIRAL_VISIBLE_TEXT_LENGTH
 const SPIRAL_ALPHA_EDGE = 0
@@ -137,29 +137,33 @@ export class SpiralController {
     private lastVisibleStartAt: number
     private lastUniqueCount: number
     private needsInitialFill: boolean
-    private spiralProgress: number
-    private blend: number
-    private blendTarget: number
-    private blendProgress: number
-    private returnDelayRemaining: number
-    private lastProgressIndex: number
+    private spiralProgress: number = 0
+    private blend: number = 0
+    private blendTarget: number = 0
+    private blendProgress: number = 0
+    private returnDelayRemaining: number = SPIRAL_RETURN_DELAY
+    private lastProgressIndex: number = 0
 
     constructor(options: SpiralControllerOptions) {
-        const plane = createDepressedPlane(options.materialParams, options.planeColor)
-        const planeMaterial = plane.material as THREE.MeshStandardMaterial
-        this.planeMaterial = planeMaterial
+        const spiralPlane = this.spiralPlane = createDepressedPlane(options.materialParams, options.planeColor)
+        this.planeMaterial = spiralPlane.material as THREE.MeshStandardMaterial
+
         const half = PLANE_SIZE / 2
         const radialStep = half
+
         const particleSystem = createPlaneParticles(half, getPlaneHeightAt)
         this.particleSystem = particleSystem
         particleSystem.object.renderOrder = 1
-        plane.add(particleSystem.object)
+        spiralPlane.add(particleSystem.object)
+
         // Lens visuals removed; keep only letter distortion.
         const textBuffer = options.textBuffer
         this.textBuffer = textBuffer
+
         this.lastVisibleCount = textBuffer.visibleSlots.length
         this.lastVisibleStartAt = textBuffer.visibleStartAt
         this.lastUniqueCount = textBuffer.uniqueChars.size
+
         this.needsInitialFill = true
 
         this.currentFontFamily = options.fontFamily
@@ -303,11 +307,11 @@ export class SpiralController {
                 tDisplaced = tDisplaced - floor(tDisplaced);
 
                 float radiusOriginal = uPlaneHalf - tOriginal * uRadialStep;
-                float angleOriginal = uSpiralTurns * 2.0 * PI * tOriginal;
+                float angleOriginal = -uSpiralTurns * 2.0 * PI * tOriginal;
                 vec2 originalPos = vec2(cos(angleOriginal), sin(angleOriginal)) * radiusOriginal;
 
                 float radiusDisplaced = uPlaneHalf - tDisplaced * uRadialStep;
-                float angleDisplaced = uSpiralTurns * 2.0 * PI * tDisplaced;
+                float angleDisplaced = -uSpiralTurns * 2.0 * PI * tDisplaced;
                 vec2 displacedPos = vec2(cos(angleDisplaced), sin(angleDisplaced)) * radiusDisplaced;
 
                 vec2 pos = mix(displacedPos, originalPos, uBlend);
@@ -385,27 +389,19 @@ export class SpiralController {
         const spiralOverlay = new THREE.Mesh(spiralGeometry, spiralMaterial)
         spiralOverlay.renderOrder = 2
         spiralOverlay.frustumCulled = false
-        plane.add(spiralOverlay)
-
-        this.spiralProgress = 0
-        this.blend = 0
-        this.blendTarget = 0
-        this.blendProgress = 0
-        this.returnDelayRemaining = SPIRAL_RETURN_DELAY
-        this.lastProgressIndex = 0
+        spiralPlane.add(spiralOverlay)
 
         spiralMaterial.uniforms.uLensCount.value = PLANE_LENS_COUNT
+
         const lensPosUniform = spiralMaterial.uniforms.uLensPos.value as THREE.Vector2[]
         const lensRadiusUniform = spiralMaterial.uniforms.uLensRadius.value as number[]
         const lensStrengthUniform = spiralMaterial.uniforms.uLensStrength.value as number[]
-        const lensSystem = createPlaneLenses(half, {
+
+        this.lensSystem = createPlaneLenses(half, {
             pos: lensPosUniform,
             radius: lensRadiusUniform,
             strength: lensStrengthUniform
         })
-        this.lensSystem = lensSystem
-
-        this.spiralPlane = plane
     }
 
     setSpiralPlaneColor(color: string | number): void {
@@ -443,19 +439,14 @@ export class SpiralController {
                 const source = slots[startAt + (bufferIndex % available)]
                 if (source) {
                     nextChar = source.char
-                    const orderedSlot = source.original ?? source
-                    const fullIndex = slots.indexOf(orderedSlot)
+                    const fullIndex = startAt + bufferIndex - source.originalDelta
                     let shuffledIndex = fullIndex - startAt
-                    if (fullIndex === -1) {
-                        shuffledIndex = bufferIndex % available
-                    } else if (shuffledIndex < 0) {
-                        shuffledIndex =
-                            (shuffledIndex % available + available) % available
+                    if (shuffledIndex < 0) {
+                        shuffledIndex = (shuffledIndex % available + available) % available
                     } else if (shuffledIndex >= available) {
                         shuffledIndex = shuffledIndex % available
                     }
-                    displacedIndex =
-                        pad + shuffledIndex
+                    displacedIndex = pad + shuffledIndex
                 }
             }
             this.displacedTArray[slotIndex] = displacedIndex / this.total
@@ -475,6 +466,7 @@ export class SpiralController {
     ): void {
         this.particleSystem.update(delta)
         let bufferDirty = false
+
         if (this.textBuffer.uniqueChars.size !== this.lastUniqueCount) {
             this.lastUniqueCount = this.textBuffer.uniqueChars.size
             this.refreshGlyphAtlas(Array.from(this.textBuffer.uniqueChars))
@@ -488,7 +480,9 @@ export class SpiralController {
             this.lastVisibleStartAt = this.textBuffer.visibleStartAt
             bufferDirty = true
         }
+
         this.lensSystem.update(delta)
+
         if (sphereState.isPointerDown) {
             this.returnDelayRemaining = Math.max(0, this.returnDelayRemaining - delta)
             this.blendTarget = this.returnDelayRemaining === 0 ? 1 : 0
@@ -496,18 +490,16 @@ export class SpiralController {
             this.returnDelayRemaining = SPIRAL_RETURN_DELAY
             this.blendTarget = 0
         }
+
         this.spiralProgress = (this.spiralProgress + SPIRAL_FLOW_SPEED * delta) % 1
+
         const progressIndex = Math.floor(this.spiralProgress * SPIRAL_LETTER_COUNT)
+
         if (progressIndex !== this.lastProgressIndex) {
-            const steps =
-                (progressIndex - this.lastProgressIndex + SPIRAL_LETTER_COUNT) %
-                SPIRAL_LETTER_COUNT
+            const steps = (progressIndex - this.lastProgressIndex + SPIRAL_LETTER_COUNT) % SPIRAL_LETTER_COUNT
             for (let step = 0; step < steps; step += 1) {
-                this.lastProgressIndex =
-                    (this.lastProgressIndex + 1) % SPIRAL_LETTER_COUNT
-                const slotIndex =
-                    (SPIRAL_LETTER_COUNT - this.lastProgressIndex) %
-                    SPIRAL_LETTER_COUNT
+                this.lastProgressIndex = (this.lastProgressIndex + 1) % SPIRAL_LETTER_COUNT
+                const slotIndex = (SPIRAL_LETTER_COUNT - this.lastProgressIndex) % SPIRAL_LETTER_COUNT
                 this.textBuffer.shift()
                 this.rebuildSlice(slotIndex, 1)
             }
