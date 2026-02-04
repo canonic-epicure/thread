@@ -4,7 +4,7 @@ import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js'
 import { ShaderPass } from 'three/examples/jsm/postprocessing/ShaderPass.js'
 import GUI from 'lil-gui'
 import { createSphereController } from './sphere.js'
-import { createSpiralController } from './spiral.js'
+import { SpiralController } from './spiral.js'
 import { initSoundCloud } from './sound.js'
 import { createNoiseShader } from './noise'
 import { DEFAULT_LONG_TEXT } from './text.js'
@@ -104,13 +104,7 @@ const {
 scene.add(sphere)
 setSphereColor(colorState.sphereColor)
 
-const {
-    spiralPlane,
-    updateSpiral,
-    setSpiralPlaneColor,
-    setSpiralLetterColor,
-    setSpiralFont
-} = createSpiralController({
+const spiralController = new SpiralController({
     renderer,
     materialParams: baseMaterialParams,
     planeColor: Number.parseInt(colorState.spiralPlane.replace('#', ''), 16),
@@ -118,7 +112,7 @@ const {
     fontFamily: typographyState.fontFamily,
     textBuffer
 })
-scene.add(spiralPlane)
+scene.add(spiralController.spiralPlane)
 
 const textStream = new LlmTextStream(
     textBuffer,
@@ -167,11 +161,11 @@ colorFolder
 colorFolder
     .addColor(colorState, 'spiralPlane')
     .name('Spiral Plane')
-    .onChange((value : string) => setSpiralPlaneColor(value))
+    .onChange((value : string) => spiralController.setSpiralPlaneColor(value))
 colorFolder
     .addColor(colorState, 'spiralLetters')
     .name('Spiral Letters')
-    .onChange((value : string) => setSpiralLetterColor(value))
+    .onChange((value : string) => spiralController.setSpiralLetterColor(value))
 colorFolder.open()
 const typographyFolder = gui.addFolder('Typography')
 typographyFolder
@@ -181,12 +175,12 @@ typographyFolder
         if (document.fonts) {
             document.fonts.load(`700 40px ${value}`).finally(() => {
                 setSphereFont(value)
-                setSpiralFont(value)
+                spiralController.setSpiralFont(value)
             })
             return
         }
         setSphereFont(value)
-        setSpiralFont(value)
+        spiralController.setSpiralFont(value)
     })
 const noiseFolder = gui.addFolder('Noise')
 noiseFolder
@@ -227,7 +221,7 @@ function animate() {
     const delta = clock.getDelta()
 
     updateSphere(delta)
-    updateSpiral(delta, getSphereState())
+    spiralController.updateSpiral(delta, getSphereState())
 
     camera.position.y += Math.cos(cameraShakeY) / 500
     cameraShakeY += 0.02

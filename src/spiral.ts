@@ -20,17 +20,6 @@ type SpiralControllerOptions = {
     textBuffer: TextStreamBuffer
 }
 
-type SpiralController = {
-    spiralPlane: THREE.Mesh
-    updateSpiral: (
-        delta: number,
-        sphereState: { isPointerDown: boolean; scrollSpeed: number }
-    ) => void
-    setSpiralPlaneColor: (color: string | number) => void
-    setSpiralLetterColor: (color: string | number) => void
-    setSpiralFont: (fontFamily: string) => void
-}
-
 const PLANE_SIZE = 5 // 15
 const PLANE_SEGMENTS = 350
 const DEPRESSION_RADIUS = 3.1
@@ -129,89 +118,124 @@ function createPlaneAlphaMap(): THREE.CanvasTexture {
     return texture
 }
 
-export function createSpiralController(options: SpiralControllerOptions): SpiralController {
-    const plane = createDepressedPlane(options.materialParams, options.planeColor)
-    const planeMaterial = plane.material as THREE.MeshStandardMaterial
-    const half = PLANE_SIZE / 2
-    const radialStep = half
-    const particleSystem = createPlaneParticles(half, getPlaneHeightAt)
-    particleSystem.object.renderOrder = 1
-    plane.add(particleSystem.object)
-    // Lens visuals removed; keep only letter distortion.
-    const textBuffer = options.textBuffer
-    let lastVisibleCount = textBuffer.visibleSlots.length
-    let lastVisibleStartAt = textBuffer.visibleStartAt
-    let lastUniqueCount = textBuffer.uniqueChars.size
-    let needsInitialFill = true
+export class SpiralController {
+    spiralPlane: THREE.Mesh
+    private planeMaterial: THREE.MeshStandardMaterial
+    private spiralMaterial: THREE.ShaderMaterial
+    private textBuffer: TextStreamBuffer
+    private glyphAtlas: GlyphAtlas
+    private fallbackGlyph: number
+    private total: number
+    private currentFontFamily: string
+    private particleSystem: ReturnType<typeof createPlaneParticles>
+    private lensSystem: ReturnType<typeof createPlaneLenses>
+    private displacedTArray: Float32Array
+    private glyphUvArray: Float32Array
+    private glyphAttribute: THREE.InstancedBufferAttribute
+    private spiralGeometry: THREE.InstancedBufferGeometry
+    private lastVisibleCount: number
+    private lastVisibleStartAt: number
+    private lastUniqueCount: number
+    private needsInitialFill: boolean
+    private spiralProgress: number
+    private blend: number
+    private blendTarget: number
+    private blendProgress: number
+    private returnDelayRemaining: number
+    private lastProgressIndex: number
 
-    let currentFontFamily = options.fontFamily
-    let glyphAtlas = new GlyphAtlas(currentFontFamily)
-    glyphAtlas.ensureChars(Array.from(textBuffer.uniqueChars))
-    glyphAtlas.texture.anisotropy = Math.min(
-        8,
-        options.renderer.capabilities.getMaxAnisotropy()
-    )
-    const total = SPIRAL_LETTER_COUNT
-    const originalTArray = new Float32Array(total)
-    const displacedTArray = new Float32Array(total)
-    const glyphUvArray = new Float32Array(total * 2)
-    let fallbackGlyph = glyphAtlas.glyphMap.get(' ') ?? 0
+    constructor(options: SpiralControllerOptions) {
+        const plane = createDepressedPlane(options.materialParams, options.planeColor)
+        const planeMaterial = plane.material as THREE.MeshStandardMaterial
+        this.planeMaterial = planeMaterial
+        const half = PLANE_SIZE / 2
+        const radialStep = half
+        const particleSystem = createPlaneParticles(half, getPlaneHeightAt)
+        this.particleSystem = particleSystem
+        particleSystem.object.renderOrder = 1
+        plane.add(particleSystem.object)
+        // Lens visuals removed; keep only letter distortion.
+        const textBuffer = options.textBuffer
+        this.textBuffer = textBuffer
+        this.lastVisibleCount = textBuffer.visibleSlots.length
+        this.lastVisibleStartAt = textBuffer.visibleStartAt
+        this.lastUniqueCount = textBuffer.uniqueChars.size
+        this.needsInitialFill = true
 
-    for (let i = 0; i < total; i += 1) {
-        originalTArray[i] = i / total
-        displacedTArray[i] = i / total
-        const glyphIndex = fallbackGlyph
-        glyphUvArray[i * 2] = glyphIndex % glyphAtlas.columns
-        glyphUvArray[i * 2 + 1] = Math.floor(glyphIndex / glyphAtlas.columns)
-    }
-
-    const baseGeometry = new THREE.PlaneGeometry(1, 1)
-    const spiralGeometry = new THREE.InstancedBufferGeometry()
-    spiralGeometry.index = baseGeometry.index
-    spiralGeometry.attributes.position = baseGeometry.attributes.position
-    spiralGeometry.attributes.uv = baseGeometry.attributes.uv
-    spiralGeometry.instanceCount = total
-    spiralGeometry.setAttribute(
-        'aOriginalT',
-        new THREE.InstancedBufferAttribute(originalTArray, 1)
-    )
-    spiralGeometry.setAttribute(
-        'aDisplacedT',
-        new THREE.InstancedBufferAttribute(displacedTArray, 1).setUsage(
-            THREE.DynamicDrawUsage
+        this.currentFontFamily = options.fontFamily
+        const glyphAtlas = new GlyphAtlas(this.currentFontFamily)
+        this.glyphAtlas = glyphAtlas
+        glyphAtlas.ensureChars(Array.from(textBuffer.uniqueChars))
+        glyphAtlas.texture.anisotropy = Math.min(
+            8,
+            options.renderer.capabilities.getMaxAnisotropy()
         )
-    )
-    const glyphAttribute = new THREE.InstancedBufferAttribute(glyphUvArray, 2)
-    glyphAttribute.setUsage(THREE.DynamicDrawUsage)
-    spiralGeometry.setAttribute('aGlyphUv', glyphAttribute)
+        const total = SPIRAL_LETTER_COUNT
+        this.total = total
+        const originalTArray = new Float32Array(total)
+        const displacedTArray = new Float32Array(total)
+        const glyphUvArray = new Float32Array(total * 2)
+        this.fallbackGlyph = glyphAtlas.glyphMap.get(' ') ?? 0
+        this.displacedTArray = displacedTArray
+        this.glyphUvArray = glyphUvArray
 
-    const spiralMaterial = new THREE.ShaderMaterial({
-        transparent: true,
-        depthTest: true,
-        depthWrite: false,
-        side: THREE.DoubleSide,
-        uniforms: {
-            uSpiralProgress: { value: 0 },
-            uBlend: { value: 0 },
-            uPlaneHalf: { value: half },
-            uRadialStep: { value: radialStep },
-            uSpiralTurns: { value: SPIRAL_TURNS },
-            uLetterSize: { value: LETTER_SIZE },
-            uDepressionRadius: { value: DEPRESSION_RADIUS },
-            uDepressionDepth: { value: DEPRESSION_DEPTH },
-            uDepressionFalloff: { value: DEPRESSION_FALLOFF },
-            uAtlas: { value: glyphAtlas.texture },
-            uAtlasGrid: { value: new THREE.Vector2(glyphAtlas.columns, glyphAtlas.rows) },
-            uLetterColor: { value: new THREE.Color(options.letterColor) },
-            uAlphaEdge: { value: SPIRAL_ALPHA_EDGE },
-            uAlphaCenter: { value: SPIRAL_ALPHA_CENTER },
-            uDebugSolid: { value: 0 },
-            uLensCount: { value: 0 },
-            uLensPos: { value: Array.from({ length: PLANE_LENS_COUNT }, () => new THREE.Vector2()) },
-            uLensRadius: { value: new Array(PLANE_LENS_COUNT).fill(0) },
-            uLensStrength: { value: new Array(PLANE_LENS_COUNT).fill(0) }
-        },
-        vertexShader: `
+        for (let i = 0; i < total; i += 1) {
+            originalTArray[i] = i / total
+            displacedTArray[i] = i / total
+            const glyphIndex = this.fallbackGlyph
+            glyphUvArray[i * 2] = glyphIndex % glyphAtlas.columns
+            glyphUvArray[i * 2 + 1] = Math.floor(glyphIndex / glyphAtlas.columns)
+        }
+
+        const baseGeometry = new THREE.PlaneGeometry(1, 1)
+        const spiralGeometry = new THREE.InstancedBufferGeometry()
+        spiralGeometry.index = baseGeometry.index
+        spiralGeometry.attributes.position = baseGeometry.attributes.position
+        spiralGeometry.attributes.uv = baseGeometry.attributes.uv
+        spiralGeometry.instanceCount = total
+        spiralGeometry.setAttribute(
+            'aOriginalT',
+            new THREE.InstancedBufferAttribute(originalTArray, 1)
+        )
+        spiralGeometry.setAttribute(
+            'aDisplacedT',
+            new THREE.InstancedBufferAttribute(displacedTArray, 1).setUsage(
+                THREE.DynamicDrawUsage
+            )
+        )
+        const glyphAttribute = new THREE.InstancedBufferAttribute(glyphUvArray, 2)
+        glyphAttribute.setUsage(THREE.DynamicDrawUsage)
+        spiralGeometry.setAttribute('aGlyphUv', glyphAttribute)
+        this.glyphAttribute = glyphAttribute
+        this.spiralGeometry = spiralGeometry
+
+        const spiralMaterial = new THREE.ShaderMaterial({
+            transparent: true,
+            depthTest: true,
+            depthWrite: false,
+            side: THREE.DoubleSide,
+            uniforms: {
+                uSpiralProgress: { value: 0 },
+                uBlend: { value: 0 },
+                uPlaneHalf: { value: half },
+                uRadialStep: { value: radialStep },
+                uSpiralTurns: { value: SPIRAL_TURNS },
+                uLetterSize: { value: LETTER_SIZE },
+                uDepressionRadius: { value: DEPRESSION_RADIUS },
+                uDepressionDepth: { value: DEPRESSION_DEPTH },
+                uDepressionFalloff: { value: DEPRESSION_FALLOFF },
+                uAtlas: { value: glyphAtlas.texture },
+                uAtlasGrid: { value: new THREE.Vector2(glyphAtlas.columns, glyphAtlas.rows) },
+                uLetterColor: { value: new THREE.Color(options.letterColor) },
+                uAlphaEdge: { value: SPIRAL_ALPHA_EDGE },
+                uAlphaCenter: { value: SPIRAL_ALPHA_CENTER },
+                uDebugSolid: { value: 0 },
+                uLensCount: { value: 0 },
+                uLensPos: { value: Array.from({ length: PLANE_LENS_COUNT }, () => new THREE.Vector2()) },
+                uLensRadius: { value: new Array(PLANE_LENS_COUNT).fill(0) },
+                uLensStrength: { value: new Array(PLANE_LENS_COUNT).fill(0) }
+            },
+            vertexShader: `
             attribute float aOriginalT;
             attribute float aDisplacedT;
             attribute vec2 aGlyphUv;
@@ -355,43 +379,63 @@ export function createSpiralController(options: SpiralControllerOptions): Spiral
                 gl_FragColor = vec4(uLetterColor, alpha);
             }
         `
-    })
+        })
+        this.spiralMaterial = spiralMaterial
 
-    const spiralOverlay = new THREE.Mesh(spiralGeometry, spiralMaterial)
-    spiralOverlay.renderOrder = 2
-    spiralOverlay.frustumCulled = false
-    plane.add(spiralOverlay)
+        const spiralOverlay = new THREE.Mesh(spiralGeometry, spiralMaterial)
+        spiralOverlay.renderOrder = 2
+        spiralOverlay.frustumCulled = false
+        plane.add(spiralOverlay)
 
-    let spiralProgress = 0
+        this.spiralProgress = 0
+        this.blend = 0
+        this.blendTarget = 0
+        this.blendProgress = 0
+        this.returnDelayRemaining = SPIRAL_RETURN_DELAY
+        this.lastProgressIndex = 0
 
-    let blend = 0
-    let blendTarget = 0
-    let blendProgress = 0
-    let returnDelayRemaining = SPIRAL_RETURN_DELAY
-    let lastProgressIndex = 0
+        spiralMaterial.uniforms.uLensCount.value = PLANE_LENS_COUNT
+        const lensPosUniform = spiralMaterial.uniforms.uLensPos.value as THREE.Vector2[]
+        const lensRadiusUniform = spiralMaterial.uniforms.uLensRadius.value as number[]
+        const lensStrengthUniform = spiralMaterial.uniforms.uLensStrength.value as number[]
+        const lensSystem = createPlaneLenses(half, {
+            pos: lensPosUniform,
+            radius: lensRadiusUniform,
+            strength: lensStrengthUniform
+        })
+        this.lensSystem = lensSystem
 
-    spiralMaterial.uniforms.uLensCount.value = PLANE_LENS_COUNT
-    const lensPosUniform = spiralMaterial.uniforms.uLensPos.value as THREE.Vector2[]
-    const lensRadiusUniform = spiralMaterial.uniforms.uLensRadius.value as number[]
-    const lensStrengthUniform = spiralMaterial.uniforms.uLensStrength.value as number[]
-    const lensSystem = createPlaneLenses(half, {
-        pos: lensPosUniform,
-        radius: lensRadiusUniform,
-        strength: lensStrengthUniform
-    })
-
-    const refreshGlyphAtlas = (chars: string[]) => {
-        glyphAtlas.ensureChars(chars)
-        fallbackGlyph = glyphAtlas.glyphMap.get(' ') ?? 0
+        this.spiralPlane = plane
     }
 
-    const rebuildSlice = (startIndex: number, count: number) => {
-        const slots = textBuffer.visibleSlots as CharSlot[]
-        const startAt = textBuffer.visibleStartAt
+    setSpiralPlaneColor(color: string | number): void {
+        this.planeMaterial.color.set(color)
+    }
+
+    setSpiralLetterColor(color: string | number): void {
+        this.spiralMaterial.uniforms.uLetterColor.value.set(color)
+    }
+
+    setSpiralFont(fontFamily: string): void {
+        this.currentFontFamily = fontFamily
+        this.glyphAtlas.setFontFamily(fontFamily)
+        this.glyphAtlas.ensureChars(Array.from(this.textBuffer.uniqueChars))
+        this.fallbackGlyph = this.glyphAtlas.glyphMap.get(' ') ?? 0
+        this.rebuildSlice(0, this.total)
+    }
+
+    private refreshGlyphAtlas(chars: string[]): void {
+        this.glyphAtlas.ensureChars(chars)
+        this.fallbackGlyph = this.glyphAtlas.glyphMap.get(' ') ?? 0
+    }
+
+    private rebuildSlice(startIndex: number, count: number): void {
+        const slots = this.textBuffer.visibleSlots as CharSlot[]
+        const startAt = this.textBuffer.visibleStartAt
         const available = slots.length - startAt
         const pad = Math.max(0, SPIRAL_VISIBLE_TEXT_LENGTH - available)
         for (let i = 0; i < count; i += 1) {
-            const slotIndex = (startIndex + i) % total
+            const slotIndex = (startIndex + i) % this.total
             let nextChar = ' '
             let displacedIndex = slotIndex
             const bufferIndex = slotIndex - pad
@@ -414,103 +458,85 @@ export function createSpiralController(options: SpiralControllerOptions): Spiral
                         pad + shuffledIndex
                 }
             }
-            displacedTArray[slotIndex] = displacedIndex / total
-            const glyphIndex = glyphAtlas.glyphMap.get(nextChar) ?? fallbackGlyph
-            glyphUvArray[slotIndex * 2] = glyphIndex % glyphAtlas.columns
-            glyphUvArray[slotIndex * 2 + 1] = Math.floor(
-                glyphIndex / glyphAtlas.columns
+            this.displacedTArray[slotIndex] = displacedIndex / this.total
+            const glyphIndex = this.glyphAtlas.glyphMap.get(nextChar) ?? this.fallbackGlyph
+            this.glyphUvArray[slotIndex * 2] = glyphIndex % this.glyphAtlas.columns
+            this.glyphUvArray[slotIndex * 2 + 1] = Math.floor(
+                glyphIndex / this.glyphAtlas.columns
             )
         }
-        glyphAttribute.needsUpdate = true
-        spiralGeometry.attributes.aDisplacedT.needsUpdate = true
+        this.glyphAttribute.needsUpdate = true
+        this.spiralGeometry.attributes.aDisplacedT.needsUpdate = true
     }
 
-    const updateSpiral = (
+    updateSpiral(
         delta: number,
         sphereState: { isPointerDown: boolean; scrollSpeed: number }
-    ) => {
-        particleSystem.update(delta)
+    ): void {
+        this.particleSystem.update(delta)
         let bufferDirty = false
-        if (textBuffer.uniqueChars.size !== lastUniqueCount) {
-            lastUniqueCount = textBuffer.uniqueChars.size
-            refreshGlyphAtlas(Array.from(textBuffer.uniqueChars))
+        if (this.textBuffer.uniqueChars.size !== this.lastUniqueCount) {
+            this.lastUniqueCount = this.textBuffer.uniqueChars.size
+            this.refreshGlyphAtlas(Array.from(this.textBuffer.uniqueChars))
             bufferDirty = true
         }
         if (
-            textBuffer.visibleSlots.length !== lastVisibleCount ||
-            textBuffer.visibleStartAt !== lastVisibleStartAt
+            this.textBuffer.visibleSlots.length !== this.lastVisibleCount ||
+            this.textBuffer.visibleStartAt !== this.lastVisibleStartAt
         ) {
-            lastVisibleCount = textBuffer.visibleSlots.length
-            lastVisibleStartAt = textBuffer.visibleStartAt
+            this.lastVisibleCount = this.textBuffer.visibleSlots.length
+            this.lastVisibleStartAt = this.textBuffer.visibleStartAt
             bufferDirty = true
         }
-        lensSystem.update(delta)
+        this.lensSystem.update(delta)
         if (sphereState.isPointerDown) {
-            returnDelayRemaining = Math.max(0, returnDelayRemaining - delta)
-            blendTarget = returnDelayRemaining === 0 ? 1 : 0
+            this.returnDelayRemaining = Math.max(0, this.returnDelayRemaining - delta)
+            this.blendTarget = this.returnDelayRemaining === 0 ? 1 : 0
         } else {
-            returnDelayRemaining = SPIRAL_RETURN_DELAY
-            blendTarget = 0
+            this.returnDelayRemaining = SPIRAL_RETURN_DELAY
+            this.blendTarget = 0
         }
-        spiralProgress = (spiralProgress + SPIRAL_FLOW_SPEED * delta) % 1
-        const progressIndex = Math.floor(spiralProgress * SPIRAL_LETTER_COUNT)
-        if (progressIndex !== lastProgressIndex) {
+        this.spiralProgress = (this.spiralProgress + SPIRAL_FLOW_SPEED * delta) % 1
+        const progressIndex = Math.floor(this.spiralProgress * SPIRAL_LETTER_COUNT)
+        if (progressIndex !== this.lastProgressIndex) {
             const steps =
-                (progressIndex - lastProgressIndex + SPIRAL_LETTER_COUNT) %
+                (progressIndex - this.lastProgressIndex + SPIRAL_LETTER_COUNT) %
                 SPIRAL_LETTER_COUNT
             for (let step = 0; step < steps; step += 1) {
-                lastProgressIndex =
-                    (lastProgressIndex + 1) % SPIRAL_LETTER_COUNT
+                this.lastProgressIndex =
+                    (this.lastProgressIndex + 1) % SPIRAL_LETTER_COUNT
                 const slotIndex =
-                    (SPIRAL_LETTER_COUNT - lastProgressIndex) %
+                    (SPIRAL_LETTER_COUNT - this.lastProgressIndex) %
                     SPIRAL_LETTER_COUNT
-                textBuffer.shift()
-                rebuildSlice(slotIndex, 1)
+                this.textBuffer.shift()
+                this.rebuildSlice(slotIndex, 1)
             }
-            lastVisibleCount = textBuffer.visibleSlots.length
-            lastVisibleStartAt = textBuffer.visibleStartAt
+            this.lastVisibleCount = this.textBuffer.visibleSlots.length
+            this.lastVisibleStartAt = this.textBuffer.visibleStartAt
         }
 
-        const duration = blendTarget === 1 ? SPIRAL_RETURN_DURATION : SPIRAL_RELEASE_DURATION
+        const duration = this.blendTarget === 1 ? SPIRAL_RETURN_DURATION : SPIRAL_RELEASE_DURATION
         const step = duration > 0 ? delta / duration : 1
-        if (blendTarget === 1) {
-            blendProgress = Math.min(1, blendProgress + step)
+        if (this.blendTarget === 1) {
+            this.blendProgress = Math.min(1, this.blendProgress + step)
         } else {
-            blendProgress = Math.max(0, blendProgress - step)
+            this.blendProgress = Math.max(0, this.blendProgress - step)
         }
 
-        const t = blendProgress
+        const t = this.blendProgress
         const eased = t * t * (3 - 2 * t)
-        blend = eased
+        this.blend = eased
 
         if (bufferDirty) {
-            const dirtyCount = Math.max(lastVisibleCount, lastVisibleStartAt + 1)
-            rebuildSlice(0, Math.min(total, dirtyCount))
+            const dirtyCount = Math.max(this.lastVisibleCount, this.lastVisibleStartAt + 1)
+            this.rebuildSlice(0, Math.min(this.total, dirtyCount))
         }
-        if (needsInitialFill) {
-            rebuildSlice(0, total)
-            needsInitialFill = false
+        if (this.needsInitialFill) {
+            this.rebuildSlice(0, this.total)
+            this.needsInitialFill = false
         }
 
-        spiralMaterial.uniforms.uSpiralProgress.value = spiralProgress
-        spiralMaterial.uniforms.uBlend.value = blend
-    }
-
-    return {
-        spiralPlane: plane,
-        updateSpiral,
-        setSpiralPlaneColor: (color: string | number) => {
-            planeMaterial.color.set(color)
-        },
-        setSpiralLetterColor: (color: string | number) => {
-            spiralMaterial.uniforms.uLetterColor.value.set(color)
-        },
-        setSpiralFont: (fontFamily: string) => {
-            currentFontFamily = fontFamily
-            glyphAtlas.setFontFamily(fontFamily)
-            glyphAtlas.ensureChars(Array.from(textBuffer.uniqueChars))
-            fallbackGlyph = glyphAtlas.glyphMap.get(' ') ?? 0
-            rebuildSlice(0, total)
-        }
+        this.spiralMaterial.uniforms.uSpiralProgress.value = this.spiralProgress
+        this.spiralMaterial.uniforms.uBlend.value = this.blend
     }
 }
