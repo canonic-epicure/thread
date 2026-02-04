@@ -1,5 +1,5 @@
 import * as THREE from 'three'
-import type { TextStreamBuffer } from './text-stream.js'
+import type { CharSlot, TextStreamBuffer } from './text-stream.js'
 import { GlyphAtlas } from './glyph-atlas.js'
 import { createPlaneParticles } from './plane-particles.js'
 import {
@@ -51,12 +51,6 @@ const SPIRAL_RELEASE_DURATION = 7
 const PLANE_FADE_RESOLUTION = 512
 const PLANE_FADE_INNER = 0.12
 const PLANE_FADE_OUTER = 0.85
-
-type BufferCharSlot = {
-    char: string
-    originalIndex: number
-    shuffledIndex: number
-}
 
 const LETTER_SIZE = (PLANE_SIZE * 18) / 2048 // 4096
 
@@ -145,7 +139,7 @@ export function createSpiralController(options: SpiralControllerOptions): Spiral
     plane.add(particleSystem.object)
     // Lens visuals removed; keep only letter distortion.
     const textBuffer = options.textBuffer
-    let lastVisibleCount = textBuffer.visibleChars.length
+    let lastVisibleCount = textBuffer.visibleSlots.length
     let lastVisibleStartAt = textBuffer.visibleStartAt
     let lastUniqueCount = textBuffer.uniqueChars.size
     let needsInitialFill = true
@@ -391,23 +385,10 @@ export function createSpiralController(options: SpiralControllerOptions): Spiral
         fallbackGlyph = glyphAtlas.glyphMap.get(' ') ?? 0
     }
 
-    const getBufferView = () => {
-        const visible = textBuffer.visibleChars.slice(
-            textBuffer.visibleStartAt
-        ) as BufferCharSlot[]
-        const ordered = visible
-            .slice()
-            .sort((a, b) => a.originalIndex - b.originalIndex)
-        const shuffledIndexMap = new Map<BufferCharSlot, number>()
-        visible.forEach((slot, index) => {
-            shuffledIndexMap.set(slot, index)
-        })
-        return { visible, ordered, shuffledIndexMap }
-    }
-
     const rebuildSlice = (startIndex: number, count: number) => {
-        const { ordered, shuffledIndexMap } = getBufferView()
-        const available = ordered.length
+        const slots = textBuffer.visibleSlots as CharSlot[]
+        const startAt = textBuffer.visibleStartAt
+        const available = slots.length - startAt
         const pad = Math.max(0, SPIRAL_VISIBLE_TEXT_LENGTH - available)
         for (let i = 0; i < count; i += 1) {
             const slotIndex = (startIndex + i) % total
@@ -415,12 +396,22 @@ export function createSpiralController(options: SpiralControllerOptions): Spiral
             let displacedIndex = slotIndex
             const bufferIndex = slotIndex - pad
             if (bufferIndex >= 0 && available > 0) {
-                const source = ordered[bufferIndex % available]
+                const source = slots[startAt + (bufferIndex % available)]
                 if (source) {
                     nextChar = source.char
-                    const shuffledIndex = shuffledIndexMap.get(source)
+                    const orderedSlot = source.original ?? source
+                    const fullIndex = slots.indexOf(orderedSlot)
+                    let shuffledIndex = fullIndex - startAt
+                    if (fullIndex === -1) {
+                        shuffledIndex = bufferIndex % available
+                    } else if (shuffledIndex < 0) {
+                        shuffledIndex =
+                            (shuffledIndex % available + available) % available
+                    } else if (shuffledIndex >= available) {
+                        shuffledIndex = shuffledIndex % available
+                    }
                     displacedIndex =
-                        pad + (shuffledIndex ?? (bufferIndex % available))
+                        pad + shuffledIndex
                 }
             }
             displacedTArray[slotIndex] = displacedIndex / total
@@ -446,10 +437,10 @@ export function createSpiralController(options: SpiralControllerOptions): Spiral
             bufferDirty = true
         }
         if (
-            textBuffer.visibleChars.length !== lastVisibleCount ||
+            textBuffer.visibleSlots.length !== lastVisibleCount ||
             textBuffer.visibleStartAt !== lastVisibleStartAt
         ) {
-            lastVisibleCount = textBuffer.visibleChars.length
+            lastVisibleCount = textBuffer.visibleSlots.length
             lastVisibleStartAt = textBuffer.visibleStartAt
             bufferDirty = true
         }
@@ -476,7 +467,7 @@ export function createSpiralController(options: SpiralControllerOptions): Spiral
                 textBuffer.shift()
                 rebuildSlice(slotIndex, 1)
             }
-            lastVisibleCount = textBuffer.visibleChars.length
+            lastVisibleCount = textBuffer.visibleSlots.length
             lastVisibleStartAt = textBuffer.visibleStartAt
         }
 

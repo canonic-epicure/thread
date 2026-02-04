@@ -29,8 +29,7 @@ const defaultConfig: TextStreamConfig = {
 
 export type CharSlot = {
     char: string
-    originalIndex: number
-    shuffledIndex: number
+    original: CharSlot
 }
 
 export class TextStreamBuffer {
@@ -41,8 +40,7 @@ export class TextStreamBuffer {
 
     uniqueChars: Set<string> = new Set([' '])
 
-    visibleChars: CharSlot[] = []
-
+    visibleSlots: CharSlot[] = []
     visibleStartAt: number = 0
 
 
@@ -54,22 +52,18 @@ export class TextStreamBuffer {
         this.visibleStartAt++
 
         if (this.visibleStartAt > this.minChunkSize) {
-            this.visibleChars = this.visibleChars.slice(this.visibleStartAt)
-            this.visibleChars.forEach(char => {
-                char.originalIndex -= this.visibleStartAt
-                char.shuffledIndex -= this.visibleStartAt
-            })
+            this.visibleSlots = this.visibleSlots.slice(this.visibleStartAt)
             this.visibleStartAt = 0
         }
     }
 
 
     get text(): string {
-        return this.visibleChars.slice(this.visibleStartAt).map(char => char.char).join('')
+        return this.visibleSlots.slice(this.visibleStartAt).map(char => char.char).join('')
     }
 
     get length(): number {
-        return this.visibleChars.length - this.visibleStartAt
+        return this.visibleSlots.length - this.visibleStartAt
     }
 
 
@@ -85,16 +79,23 @@ export class TextStreamBuffer {
 
         if (this.pending.length > this.minChunkSize) {
             const chars = Array.from(this.pending)
-                .map((char, index): CharSlot => ({ char, originalIndex: index, shuffledIndex: index + Math.floor(Math.random() * this.shuffle_radius * 2) - this.shuffle_radius }))
+                .map((char, index) => {
+                    const shuffled = index + Math.floor(Math.random() * this.shuffle_radius * 2) - this.shuffle_radius
 
-            chars.sort((a, b) => a.shuffledIndex - b.shuffledIndex)
+                    return { char, index, shuffled }
+                })
 
-            chars.forEach((char, index) => {
-                char.originalIndex = char.originalIndex + this.visibleChars.length
-                char.shuffledIndex = index + this.visibleChars.length
+            chars.sort((a, b) => a.shuffled - b.shuffled)
+
+            const slots = chars.map((char) : CharSlot => {
+                return { char: char.char, original : null }
             })
 
-            this.visibleChars.push(...chars)
+            slots.forEach((slot, index) => {
+                slot.original = slots[ chars[index].index ]
+            })
+
+            this.visibleSlots.push(...slots)
 
             this.pending = ''
         }
@@ -225,15 +226,4 @@ export class LlmTextStream {
 
 function sanitizeText(value: string): string {
     return value.replace(/\s+/g, ' ').toUpperCase()
-}
-
-function shuffleString(value: string): string {
-    const chars = Array.from(value)
-    for (let i = chars.length - 1; i > 0; i -= 1) {
-        const j = Math.floor(Math.random() * (i + 1))
-        const temp = chars[i]
-        chars[i] = chars[j]
-        chars[j] = temp
-    }
-    return chars.join('')
 }
