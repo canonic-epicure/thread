@@ -37,33 +37,33 @@ const camera = new THREE.PerspectiveCamera(
 )
 camera.position.set(0, 0, 3.2)
 
-const ambient = new THREE.AmbientLight(0xffffff, 0.9)
+const ambient     = new THREE.AmbientLight(0xffffff, 0.9)
 const directional = new THREE.DirectionalLight(0xffffff, 0.8)
 directional.position.set(2, 3, 4)
 scene.add(ambient, directional)
 
 const sphereLetterAlpha = 1.0
-const sphereGridAlpha = 1
-const colorState = {
+const sphereGridAlpha   = 1
+const colorState        = {
     background: '#565656',
     sphereColor: '#7d7d7d',
     sphereLetters: '#cccccc',
     spiralPlane: '#687a82',
     spiralLetters: '#ffffff' // #cccccc'
 }
-const typographyState = {
+const typographyState   = {
     fontFamily: 'Roboto'
 }
-const toRgba = (hex : string, alpha : number) => {
+const toRgba            = (hex : string, alpha : number) => {
     const color = new THREE.Color(hex)
-    const r = Math.round(color.r * 255)
-    const g = Math.round(color.g * 255)
-    const b = Math.round(color.b * 255)
+    const r     = Math.round(color.r * 255)
+    const g     = Math.round(color.g * 255)
+    const b     = Math.round(color.b * 255)
     return `rgba(${ r },${ g },${ b },${ alpha })`
 }
-scene.background = new THREE.Color(colorState.background)
+scene.background  = new THREE.Color(colorState.background)
 const letterColor = toRgba(colorState.sphereLetters, sphereLetterAlpha)
-const gridColor = toRgba(colorState.sphereLetters, sphereGridAlpha)
+const gridColor   = toRgba(colorState.sphereLetters, sphereGridAlpha)
 
 const sharedSurface = {
     roughness: 0.6,
@@ -80,7 +80,7 @@ const baseMaterialParams = {
 
 const MIXED_CHUNK_MIN_SIZE = 3
 
-const textBuffer = new TextStreamBuffer(DEFAULT_LONG_TEXT)
+const textBuffer        = new TextStreamBuffer(DEFAULT_LONG_TEXT)
 textBuffer.minChunkSize = MIXED_CHUNK_MIN_SIZE
 
 const {
@@ -137,7 +137,7 @@ composer.addPass(new RenderPass(scene, camera))
 const noisePass = new ShaderPass(createNoiseShader(0.061125, 2.8, 0.12))
 composer.addPass(noisePass)
 
-const gui = new GUI({ title: 'Inspector' })
+const gui         = new GUI({ title: 'Inspector' })
 const colorFolder = gui.addFolder('Colors')
 colorFolder
     .addColor(colorState, 'background')
@@ -213,8 +213,8 @@ window.addEventListener('mousemove', (event) => {
 const clock = new THREE.Clock()
 
 let cameraShakeY = 0
-let mouseX = 0
-let mouseY = 0
+let mouseX       = 0
+let mouseY       = 0
 
 function animate() {
     requestAnimationFrame(animate)
@@ -224,13 +224,13 @@ function animate() {
     spiralController.updateSpiral(delta, getSphereState())
 
     camera.position.y += Math.cos(cameraShakeY) / 500
-    cameraShakeY += 0.02
+    cameraShakeY      += 0.02
 
     // mouse camera move
     camera.position.x += (mouseX * 0.5 - camera.position.x) * 0.02
 
     camera.position.y += (-mouseY * 0.3 - camera.position.y) * 0.02
-    camera.position.y = Math.max(camera.position.y, -1)
+    camera.position.y  = Math.max(camera.position.y, -1)
 
     noisePass.uniforms.uTime.value += delta
     composer.render()

@@ -34,23 +34,23 @@ type SphereController = {
 }
 
 // Grid layout for the sphere texture (rectangular cells wrapped onto the sphere).
-const SPHERE_COLUMN_COUNT = 32
-const SPHERE_ROW_COUNT = 20
-const SPHERE_TEXTURE_SIZE = 2048
+const SPHERE_COLUMN_COUNT   = 32
+const SPHERE_ROW_COUNT      = 20
+const SPHERE_TEXTURE_SIZE   = 2048
 const SPHERE_TEXTURE_OFFSET = 1 / (SPHERE_COLUMN_COUNT * 2)
 // The front-facing UV for a sphere in three.js maps to u ≈ 0.75.
-const SPHERE_GLOW_BLUR = 32
+const SPHERE_GLOW_BLUR  = 32
 const SPHERE_GLOW_ALPHA = 0.85
 const SPHERE_GLOW_COLOR = '#efefef'
 const SPHERE_GLOW_SCALE = 1.2
 
 // Scroll and inertia tuning for the sphere texture.
 const sphereTextureScrollSpeed = 0.04
-const sphereAutoScrollSpeed = -sphereTextureScrollSpeed
-const sphereDragSpeedFactor = 0.1
-const sphereMaxDragSpeed = 0.4
-const sphereSlowdownTime = 0.3
-const sphereResumeTime = 2.0
+const sphereAutoScrollSpeed    = -sphereTextureScrollSpeed
+const sphereDragSpeedFactor    = 0.1
+const sphereMaxDragSpeed       = 0.4
+const sphereSlowdownTime       = 0.3
+const sphereResumeTime         = 2.0
 
 // Builds the 2D canvas that becomes the sphere texture.
 // The grid is drawn first, then letters are placed in each cell.
@@ -63,22 +63,22 @@ function createSphereTexture(
     text: string
 ): THREE.CanvasTexture {
     const safeText = text.length > 0 ? text : ' '
-    const size = SPHERE_TEXTURE_SIZE
-    const canvas = document.createElement('canvas')
-    canvas.width = size
-    canvas.height = size
-    const ctx = canvas.getContext('2d')
+    const size     = SPHERE_TEXTURE_SIZE
+    const canvas   = document.createElement('canvas')
+    canvas.width   = size
+    canvas.height  = size
+    const ctx      = canvas.getContext('2d')
     if (!ctx) {
         throw new Error('Failed to get 2D context')
     }
 
     ctx.clearRect(0, 0, size, size)
 
-    const cellWidth = size / SPHERE_COLUMN_COUNT
+    const cellWidth  = size / SPHERE_COLUMN_COUNT
     const cellHeight = size / SPHERE_ROW_COUNT
 
     ctx.strokeStyle = gridColor
-    ctx.lineWidth = 2
+    ctx.lineWidth   = 2
     for (let i = 0; i <= SPHERE_COLUMN_COUNT; i += 1) {
         const x = i * cellWidth
         ctx.beginPath()
@@ -94,40 +94,40 @@ function createSphereTexture(
         ctx.stroke()
     }
 
-    ctx.fillStyle = letterColor
-    ctx.textAlign = 'center'
+    ctx.fillStyle    = letterColor
+    ctx.textAlign    = 'center'
     ctx.textBaseline = 'middle'
-    ctx.font = `bold 40px ${fontFamily}`
+    ctx.font         = `bold 40px ${fontFamily}`
 
     for (let col = 0; col < SPHERE_COLUMN_COUNT; col += 1) {
         // Column-based offset creates a vertical "text stream" per column.
         const columnOffset = (col * 7) % safeText.length
         for (let row = 0; row < SPHERE_ROW_COUNT; row += 1) {
             const index = (columnOffset + row) % safeText.length
-            const char = safeText[index]
-            const cx = col * cellWidth + cellWidth / 2
-            const cy = row * cellHeight + cellHeight / 2
+            const char  = safeText[index]
+            const cx    = col * cellWidth + cellWidth / 2
+            const cy    = row * cellHeight + cellHeight / 2
             if (col === Math.floor(SPHERE_COLUMN_COUNT / 4)) {
                 ctx.save()
-                ctx.globalAlpha = SPHERE_GLOW_ALPHA
-                ctx.shadowColor = SPHERE_GLOW_COLOR
-                ctx.shadowBlur = SPHERE_GLOW_BLUR
-                ctx.shadowOffsetX = 0
-                ctx.shadowOffsetY = 0
+                ctx.globalAlpha              = SPHERE_GLOW_ALPHA
+                ctx.shadowColor              = SPHERE_GLOW_COLOR
+                ctx.shadowBlur               = SPHERE_GLOW_BLUR
+                ctx.shadowOffsetX            = 0
+                ctx.shadowOffsetY            = 0
                 ctx.globalCompositeOperation = 'lighter'
-                ctx.fillStyle = SPHERE_GLOW_COLOR
-                ctx.font = `bold ${Math.round(40 * SPHERE_GLOW_SCALE)}px ${fontFamily}`
+                ctx.fillStyle                = SPHERE_GLOW_COLOR
+                ctx.font                     = `bold ${Math.round(40 * SPHERE_GLOW_SCALE)}px ${fontFamily}`
                 ctx.fillText(char, cx, cy)
                 ctx.restore()
             }
             ctx.fillStyle = letterColor
-            ctx.font = `bold 40px ${fontFamily}`
+            ctx.font      = `bold 40px ${fontFamily}`
             ctx.fillText(char, cx, cy)
         }
     }
 
-    const texture = new THREE.CanvasTexture(canvas)
-    texture.anisotropy = Math.min(8, renderer.capabilities.getMaxAnisotropy())
+    const texture       = new THREE.CanvasTexture(canvas)
+    texture.anisotropy  = Math.min(8, renderer.capabilities.getMaxAnisotropy())
     texture.needsUpdate = true
     return texture
 }
@@ -135,11 +135,11 @@ function createSphereTexture(
 export function createSphereController(options: SphereControllerOptions): SphereController {
     const { renderer, camera, materialParams, letterColor, gridColor, fontFamily, text } =
         options
-    let currentLetterColor = letterColor
-    let currentGridColor = gridColor
-    let currentFontFamily = fontFamily
-    let currentText = text
-    let texture = createSphereTexture(
+    let currentLetterColor                                                               = letterColor
+    let currentGridColor                                                                 = gridColor
+    let currentFontFamily                                                                = fontFamily
+    let currentText                                                                      = text
+    let texture                                                                          = createSphereTexture(
         renderer,
         currentLetterColor,
         currentGridColor,
@@ -154,7 +154,7 @@ export function createSphereController(options: SphereControllerOptions): Sphere
     texture.offset.set(SPHERE_TEXTURE_OFFSET, 0)
 
     // Sphere geometry stays fixed; motion is done by scrolling the texture.
-    const sphereGeometry = new THREE.SphereGeometry(1, 64, 64)
+    const sphereGeometry     = new THREE.SphereGeometry(1, 64, 64)
     const sphereBaseMaterial = new THREE.MeshStandardMaterial({
         ...materialParams
     })
@@ -164,10 +164,10 @@ export function createSphereController(options: SphereControllerOptions): Sphere
         transparent: true,
         depthWrite: false
     })
-    const baseSphere = new THREE.Mesh(sphereGeometry, sphereBaseMaterial)
-    const textSphere = new THREE.Mesh(sphereGeometry, sphereTextMaterial)
+    const baseSphere         = new THREE.Mesh(sphereGeometry, sphereBaseMaterial)
+    const textSphere         = new THREE.Mesh(sphereGeometry, sphereTextMaterial)
     textSphere.scale.setScalar(1.002)
-    const sphere = new THREE.Group()
+    const sphere      = new THREE.Group()
     sphere.position.y = -0.5
     sphere.add(baseSphere, textSphere)
 
@@ -184,23 +184,23 @@ export function createSphereController(options: SphereControllerOptions): Sphere
         nextTexture.repeat.set(1, 1)
         nextTexture.offset.set(SPHERE_TEXTURE_OFFSET, 0)
         texture.dispose()
-        texture = nextTexture
-        sphereTextMaterial.map = texture
+        texture                        = nextTexture
+        sphereTextMaterial.map         = texture
         sphereTextMaterial.needsUpdate = true
     }
 
 
     // Raycast hit-testing ensures dragging only starts when clicking the sphere.
-    const sphereRaycaster = new THREE.Raycaster()
-    const spherePointer = new THREE.Vector2()
+    const sphereRaycaster   = new THREE.Raycaster()
+    const spherePointer     = new THREE.Vector2()
     let isSpherePointerDown = false
-    let lastPointerY = 0
-    let lastPointerTime = 0
+    let lastPointerY        = 0
+    let lastPointerTime     = 0
     // currentScrollSpeed is the instantaneous scroll velocity.
     // currentBaseSpeed is the target speed (0 while pressed, auto speed after release).
     let currentScrollSpeed = sphereAutoScrollSpeed
-    let targetScrollSpeed = sphereAutoScrollSpeed
-    let currentBaseSpeed = sphereAutoScrollSpeed
+    let targetScrollSpeed  = sphereAutoScrollSpeed
+    let currentBaseSpeed   = sphereAutoScrollSpeed
 
     renderer.domElement.addEventListener('pointerdown', (event) => {
         spherePointer.x = (event.clientX / window.innerWidth) * 2 - 1
@@ -212,9 +212,9 @@ export function createSphereController(options: SphereControllerOptions): Sphere
         }
         // Start drag: base speed goes to zero and inertia slows the scroll.
         isSpherePointerDown = true
-        currentBaseSpeed = 0
-        lastPointerY = event.clientY
-        lastPointerTime = performance.now()
+        currentBaseSpeed    = 0
+        lastPointerY        = event.clientY
+        lastPointerTime     = performance.now()
         renderer.domElement.setPointerCapture(event.pointerId)
     })
 
@@ -222,14 +222,14 @@ export function createSphereController(options: SphereControllerOptions): Sphere
         if (!isSpherePointerDown) {
             return
         }
-        const now = performance.now()
-        const deltaY = event.clientY - lastPointerY
+        const now       = performance.now()
+        const deltaY    = event.clientY - lastPointerY
         const deltaTime = Math.max(8, now - lastPointerTime)
-        lastPointerY = event.clientY
+        lastPointerY    = event.clientY
         lastPointerTime = now
-        const velocity = deltaY / deltaTime
+        const velocity  = deltaY / deltaTime
         // Drag impulses add to the current velocity, allowing stacked pushes.
-        const impulse = THREE.MathUtils.clamp(
+        const impulse      = THREE.MathUtils.clamp(
             velocity * sphereDragSpeedFactor,
             -sphereMaxDragSpeed,
             sphereMaxDragSpeed
@@ -256,7 +256,7 @@ export function createSphereController(options: SphereControllerOptions): Sphere
             return
         }
         isSpherePointerDown = false
-        currentBaseSpeed = sphereAutoScrollSpeed
+        currentBaseSpeed    = sphereAutoScrollSpeed
         renderer.domElement.releasePointerCapture(event.pointerId)
     })
 
@@ -265,10 +265,10 @@ export function createSphereController(options: SphereControllerOptions): Sphere
         sphere.rotation.y = 0
         sphere.rotation.x = 0
 
-        targetScrollSpeed = currentBaseSpeed
+        targetScrollSpeed  = currentBaseSpeed
         const timeConstant =
             targetScrollSpeed === 0 ? sphereSlowdownTime : sphereResumeTime
-        const smoothing = 1 - Math.exp(-delta / timeConstant)
+        const smoothing    = 1 - Math.exp(-delta / timeConstant)
         // Ease current speed toward the target speed for smooth inertia.
         currentScrollSpeed += (targetScrollSpeed - currentScrollSpeed) * smoothing
 
@@ -290,7 +290,7 @@ export function createSphereController(options: SphereControllerOptions): Sphere
         },
         setSphereLetterColor: (nextLetterColor: string, nextGridColor?: string) => {
             currentLetterColor = nextLetterColor
-            currentGridColor = nextGridColor ?? nextLetterColor
+            currentGridColor   = nextGridColor ?? nextLetterColor
             rebuildTexture()
         },
         setSphereFont: (nextFontFamily: string) => {

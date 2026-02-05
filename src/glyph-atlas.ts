@@ -1,10 +1,10 @@
 import * as THREE from 'three'
 
-const GLYPH_CELL_SIZE = 64
-const GLYPH_FONT_SIZE = 64
+const GLYPH_CELL_SIZE     = 64
+const GLYPH_FONT_SIZE     = 64
 const GLYPH_ATLAS_COLUMNS = 16
-const GLYPH_ATLAS_ROWS = 4
-const DEFAULT_SEED = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ '
+const GLYPH_ATLAS_ROWS    = 4
+const DEFAULT_SEED        = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ '
 
 type GlyphAtlasOptions = {
     columns?: number
@@ -24,16 +24,16 @@ export class GlyphAtlas {
     private fontFamily: string
 
     constructor(fontFamily: string, options?: GlyphAtlasOptions) {
-        this.columns = options?.columns ?? GLYPH_ATLAS_COLUMNS
-        this.rows = options?.rows ?? GLYPH_ATLAS_ROWS
-        this.fontFamily = fontFamily
-        this.glyphMap = new Map<string, number>()
+        this.columns       = options?.columns ?? GLYPH_ATLAS_COLUMNS
+        this.rows          = options?.rows ?? GLYPH_ATLAS_ROWS
+        this.fontFamily    = fontFamily
+        this.glyphMap      = new Map<string, number>()
         this.glyphsByIndex = []
 
-        this.canvas = document.createElement('canvas')
-        this.canvas.width = this.columns * GLYPH_CELL_SIZE
+        this.canvas        = document.createElement('canvas')
+        this.canvas.width  = this.columns * GLYPH_CELL_SIZE
         this.canvas.height = this.rows * GLYPH_CELL_SIZE
-        const ctx = this.canvas.getContext('2d')
+        const ctx          = this.canvas.getContext('2d')
         if (!ctx) {
             throw new Error('Failed to get glyph atlas context')
         }
@@ -41,11 +41,11 @@ export class GlyphAtlas {
         this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height)
         this.applyFont()
 
-        this.texture = new THREE.CanvasTexture(this.canvas)
-        this.texture.minFilter = THREE.LinearFilter
-        this.texture.magFilter = THREE.LinearFilter
+        this.texture                 = new THREE.CanvasTexture(this.canvas)
+        this.texture.minFilter       = THREE.LinearFilter
+        this.texture.magFilter       = THREE.LinearFilter
         this.texture.generateMipmaps = false
-        this.texture.needsUpdate = true
+        this.texture.needsUpdate     = true
 
         const seed = options?.seedChars ?? DEFAULT_SEED
         this.ensureChars(seed.split(''))
@@ -68,7 +68,7 @@ export class GlyphAtlas {
     }
 
     ensureChars(chars: string[]): boolean {
-        let added = false
+        let added           = false
         let capacityReached = false
         for (const char of chars) {
             if (this.glyphMap.has(char)) {
@@ -100,17 +100,17 @@ export class GlyphAtlas {
     }
 
     private applyFont() {
-        this.ctx.fillStyle = 'white'
-        this.ctx.textAlign = 'center'
+        this.ctx.fillStyle    = 'white'
+        this.ctx.textAlign    = 'center'
         this.ctx.textBaseline = 'middle'
-        this.ctx.font = `bold ${GLYPH_FONT_SIZE}px ${this.fontFamily}`
+        this.ctx.font         = `bold ${GLYPH_FONT_SIZE}px ${this.fontFamily}`
     }
 
     private drawGlyph(char: string, index: number) {
         const col = index % this.columns
         const row = Math.floor(index / this.columns)
-        const x = col * GLYPH_CELL_SIZE
-        const y = row * GLYPH_CELL_SIZE
+        const x   = col * GLYPH_CELL_SIZE
+        const y   = row * GLYPH_CELL_SIZE
         this.ctx.clearRect(x, y, GLYPH_CELL_SIZE, GLYPH_CELL_SIZE)
         const cx = x + GLYPH_CELL_SIZE / 2
         const cy = y + GLYPH_CELL_SIZE / 2

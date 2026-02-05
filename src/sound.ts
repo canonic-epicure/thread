@@ -15,10 +15,10 @@ const loadSoundCloudWidgetApi = () =>
             }
             return
         }
-        const script = document.createElement('script')
+        const script                    = document.createElement('script')
         script.dataset.soundcloudWidget = 'true'
-        script.src = 'https://w.soundcloud.com/player/api.js'
-        script.async = true
+        script.src                      = 'https://w.soundcloud.com/player/api.js'
+        script.async                    = true
         script.addEventListener('load', () => resolve())
         script.addEventListener('error', () =>
             reject(new Error('Failed to load SoundCloud widget API'))
@@ -72,22 +72,22 @@ export const initSoundCloud = (
         </svg>
     `
 
-    const soundcloudPlayer = document.createElement('div')
+    const soundcloudPlayer     = document.createElement('div')
     soundcloudPlayer.className = 'soundcloud-player'
-    const soundcloudFrame = document.createElement('iframe')
-    soundcloudFrame.title = 'SoundCloud player'
-    soundcloudFrame.width = '100%'
-    soundcloudFrame.height = '100%'
-    soundcloudFrame.allow = 'autoplay'
-    soundcloudFrame.loading = 'lazy'
-    soundcloudFrame.src = `https://w.soundcloud.com/player/?url=${encodeURIComponent(
+    const soundcloudFrame      = document.createElement('iframe')
+    soundcloudFrame.title      = 'SoundCloud player'
+    soundcloudFrame.width      = '100%'
+    soundcloudFrame.height     = '100%'
+    soundcloudFrame.allow      = 'autoplay'
+    soundcloudFrame.loading    = 'lazy'
+    soundcloudFrame.src        = `https://w.soundcloud.com/player/?url=${encodeURIComponent(
         trackUrl
     )}&color=%23ff5500&auto_play=false&hide_related=true&show_comments=false&show_user=true&show_reposts=false&show_teaser=false`
     soundcloudPlayer.appendChild(soundcloudFrame)
     app.appendChild(soundcloudPlayer)
 
-    const toggleButton = document.createElement('button')
-    toggleButton.type = 'button'
+    const toggleButton     = document.createElement('button')
+    toggleButton.type      = 'button'
     toggleButton.className = 'soundcloud-toggle'
     toggleButton.innerHTML = volumeOffIcon
     toggleButton.setAttribute('aria-label', 'Sound off')
@@ -100,7 +100,7 @@ export const initSoundCloud = (
             if (!sc?.Widget) {
                 return
             }
-            const widget = sc.Widget(soundcloudFrame)
+            const widget     = sc.Widget(soundcloudFrame)
             let startApplied = false
 
             const setToggleState = (isPlaying: boolean) => {

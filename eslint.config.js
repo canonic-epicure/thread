@@ -1,5 +1,6 @@
 import tseslint from '@typescript-eslint/eslint-plugin'
 import tsParser from '@typescript-eslint/parser'
+import alignAssignments from 'eslint-plugin-align-assignments'
 
 export default [
     {
@@ -12,11 +13,13 @@ export default [
             }
         },
         plugins: {
-            '@typescript-eslint': tseslint
+            '@typescript-eslint': tseslint,
+            'align-assignments': alignAssignments
         },
         rules: {
             'max-len': ['error', { code: 120 }],
-            'no-trailing-spaces': 'error'
+            'no-trailing-spaces': 'error',
+            'align-assignments/align-assignments': 'error'
         }
     }
 ]

@@ -52,7 +52,7 @@ export class TextStreamBuffer {
         this.visibleStartAt++
 
         if (this.visibleStartAt > this.minChunkSize) {
-            this.visibleSlots = this.visibleSlots.slice(this.visibleStartAt)
+            this.visibleSlots   = this.visibleSlots.slice(this.visibleStartAt)
             this.visibleStartAt = 0
         }
     }
@@ -115,8 +115,8 @@ export class LlmTextStream {
         config: Partial<TextStreamConfig>,
         callbacks: TextStreamCallbacks
     ) {
-        this.buffer = buffer
-        this.config = { ...defaultConfig, ...config }
+        this.buffer    = buffer
+        this.config    = { ...defaultConfig, ...config }
         this.callbacks = callbacks
     }
 
@@ -180,23 +180,23 @@ export class LlmTextStream {
     }
 
     private async consumeSseStream(stream: ReadableStream<Uint8Array>) {
-        const reader = stream.getReader()
+        const reader  = stream.getReader()
         const decoder = new TextDecoder()
-        let buffer = ''
-        let done = false
+        let buffer    = ''
+        let done      = false
 
         while (!done) {
             const { value, done: readerDone } = await reader.read()
-            done = readerDone
+            done                              = readerDone
             if (value) {
                 buffer += decoder.decode(value, { stream: true })
-                buffer = this.processSseBuffer(buffer)
+                buffer  = this.processSseBuffer(buffer)
             }
         }
     }
 
     private processSseBuffer(buffer: string): string {
-        const lines = buffer.split('\n')
+        const lines     = buffer.split('\n')
         const remaining = lines.pop() ?? ''
 
         for (const line of lines) {
@@ -210,7 +210,7 @@ export class LlmTextStream {
                 const payload = JSON.parse(data) as {
                     choices?: Array<{ delta?: { content?: string } }>
                 }
-                const delta = payload.choices?.[0]?.delta?.content
+                const delta   = payload.choices?.[0]?.delta?.content
                 if (delta) {
                     this.buffer.append(delta)
                     this.emitUpdate()

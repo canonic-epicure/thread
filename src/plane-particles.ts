@@ -1,17 +1,17 @@
 import * as THREE from 'three'
 
-const PLANE_PARTICLE_COUNT = 30
-const PLANE_PARTICLE_SPEED_MIN = 0.6
-const PLANE_PARTICLE_SPEED_MAX = 1.6
-const PLANE_PARTICLE_LIFE_MIN = 0.35
-const PLANE_PARTICLE_LIFE_MAX = 1.35
-const PLANE_PARTICLE_TRAIL_SECONDS = 0.1
-const PLANE_PARTICLE_EDGE_PADDING = 0.1
-const PLANE_PARTICLE_HEIGHT_OFFSET = 0.0
-const PLANE_PARTICLE_WIDTH = 0.01
-const PLANE_PARTICLE_THICKNESS = 0.03
+const PLANE_PARTICLE_COUNT          = 30
+const PLANE_PARTICLE_SPEED_MIN      = 0.6
+const PLANE_PARTICLE_SPEED_MAX      = 1.6
+const PLANE_PARTICLE_LIFE_MIN       = 0.35
+const PLANE_PARTICLE_LIFE_MAX       = 1.35
+const PLANE_PARTICLE_TRAIL_SECONDS  = 0.1
+const PLANE_PARTICLE_EDGE_PADDING   = 0.1
+const PLANE_PARTICLE_HEIGHT_OFFSET  = 0.0
+const PLANE_PARTICLE_WIDTH          = 0.01
+const PLANE_PARTICLE_THICKNESS      = 0.03
 const PLANE_PARTICLE_SURFACE_OFFSET = 0.002
-const PLANE_PARTICLE_HEAD_LENGTH = 0.35
+const PLANE_PARTICLE_HEAD_LENGTH    = 0.35
 
 type PlaneParticle = {
     pos: THREE.Vector2
@@ -29,15 +29,15 @@ export function createPlaneParticles(
     update: (delta: number) => void
 } {
     const particles: PlaneParticle[] = []
-    const baseQuad = new THREE.BoxGeometry(1, 1, 1)
-    const geometry = new THREE.InstancedBufferGeometry()
-    geometry.index = baseQuad.index
-    geometry.attributes.position = baseQuad.attributes.position
-    geometry.attributes.uv = baseQuad.attributes.uv
-    geometry.instanceCount = PLANE_PARTICLE_COUNT
+    const baseQuad                   = new THREE.BoxGeometry(1, 1, 1)
+    const geometry                   = new THREE.InstancedBufferGeometry()
+    geometry.index                   = baseQuad.index
+    geometry.attributes.position     = baseQuad.attributes.position
+    geometry.attributes.uv           = baseQuad.attributes.uv
+    geometry.instanceCount           = PLANE_PARTICLE_COUNT
 
-    const tailArray = new Float32Array(PLANE_PARTICLE_COUNT * 3)
-    const headArray = new Float32Array(PLANE_PARTICLE_COUNT * 3)
+    const tailArray  = new Float32Array(PLANE_PARTICLE_COUNT * 3)
+    const headArray  = new Float32Array(PLANE_PARTICLE_COUNT * 3)
     const alphaArray = new Float32Array(PLANE_PARTICLE_COUNT * 2)
     const widthArray = new Float32Array(PLANE_PARTICLE_COUNT)
     geometry.setAttribute('aTail', new THREE.InstancedBufferAttribute(tailArray, 3))
@@ -99,9 +99,9 @@ export function createPlaneParticles(
         `
     })
 
-    const mesh = new THREE.Mesh(geometry, material)
+    const mesh         = new THREE.Mesh(geometry, material)
     mesh.frustumCulled = false
-    mesh.renderOrder = 1
+    mesh.renderOrder   = 1
 
     const spawnParticle = (particle: PlaneParticle) => {
         const range = half - PLANE_PARTICLE_EDGE_PADDING
@@ -116,8 +116,8 @@ export function createPlaneParticles(
             PLANE_PARTICLE_SPEED_MAX,
             Math.random()
         )
-        particle.age = 0
-        particle.life = THREE.MathUtils.lerp(
+        particle.age   = 0
+        particle.life  = THREE.MathUtils.lerp(
             PLANE_PARTICLE_LIFE_MIN,
             PLANE_PARTICLE_LIFE_MAX,
             Math.random()
@@ -140,7 +140,7 @@ export function createPlaneParticles(
         const range = half + PLANE_PARTICLE_EDGE_PADDING
         for (let i = 0; i < particles.length; i += 1) {
             const particle = particles[i]
-            particle.age += delta
+            particle.age  += delta
             if (
                 particle.age >= particle.life ||
                 Math.abs(particle.pos.x) > range ||
@@ -149,36 +149,36 @@ export function createPlaneParticles(
                 spawnParticle(particle)
             }
 
-            const step = particle.speed * delta
+            const step      = particle.speed * delta
             particle.pos.x += particle.vel.x * step
             particle.pos.y += particle.vel.y * step
 
-            const lifeT = THREE.MathUtils.clamp(1 - particle.age / particle.life, 0, 1)
+            const lifeT     = THREE.MathUtils.clamp(1 - particle.age / particle.life, 0, 1)
             const alphaHead = 0.7 * lifeT
             const alphaTail = 0.0
-            const trail = Math.max(0.01, particle.speed * PLANE_PARTICLE_TRAIL_SECONDS)
-            const tailX = particle.pos.x - particle.vel.x * trail
-            const tailY = particle.pos.y - particle.vel.y * trail
+            const trail     = Math.max(0.01, particle.speed * PLANE_PARTICLE_TRAIL_SECONDS)
+            const tailX     = particle.pos.x - particle.vel.x * trail
+            const tailY     = particle.pos.y - particle.vel.y * trail
 
             const zHead = getPlaneHeightAt(particle.pos.x, particle.pos.y) + PLANE_PARTICLE_HEIGHT_OFFSET
             const zTail = getPlaneHeightAt(tailX, tailY) + PLANE_PARTICLE_HEIGHT_OFFSET
 
-            const tailIndex = i * 3
-            tailArray[tailIndex] = tailX
+            const tailIndex          = i * 3
+            tailArray[tailIndex]     = tailX
             tailArray[tailIndex + 1] = tailY
             tailArray[tailIndex + 2] = zTail
-            headArray[tailIndex] = particle.pos.x
+            headArray[tailIndex]     = particle.pos.x
             headArray[tailIndex + 1] = particle.pos.y
             headArray[tailIndex + 2] = zHead
 
-            const alphaIndex = i * 2
-            alphaArray[alphaIndex] = alphaTail
+            const alphaIndex           = i * 2
+            alphaArray[alphaIndex]     = alphaTail
             alphaArray[alphaIndex + 1] = alphaHead
-            widthArray[i] = PLANE_PARTICLE_WIDTH
+            widthArray[i]              = PLANE_PARTICLE_WIDTH
         }
 
-        geometry.attributes.aTail.needsUpdate = true
-        geometry.attributes.aHead.needsUpdate = true
+        geometry.attributes.aTail.needsUpdate  = true
+        geometry.attributes.aHead.needsUpdate  = true
         geometry.attributes.aAlpha.needsUpdate = true
         geometry.attributes.aWidth.needsUpdate = true
     }
