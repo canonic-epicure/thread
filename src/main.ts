@@ -4,7 +4,8 @@ import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js'
 import { ShaderPass } from 'three/examples/jsm/postprocessing/ShaderPass.js'
 import GUI from 'lil-gui'
 import { createSphereController } from './sphere.js'
-import { SpiralController } from './spiral.js'
+import { SpiralController } from './spiral3.js'
+import { SpiralController as SpiralController2 } from './spiral3.js'
 import { initSoundCloud } from './sound.js'
 import { createNoiseShader } from './noise'
 import { DEFAULT_LONG_TEXT } from './text.js'
@@ -101,10 +102,10 @@ const {
         fontFamily: typographyState.fontFamily,
         text: textBuffer.text
     })
-scene.add(sphere)
+// scene.add(sphere)
 setSphereColor(colorState.sphereColor)
 
-const spiralController = new SpiralController({
+const spiralController = new SpiralController2({
     renderer,
     materialParams: baseMaterialParams,
     planeColor: Number.parseInt(colorState.spiralPlane.replace('#', ''), 16),
@@ -169,7 +170,7 @@ colorFolder
 colorFolder.open()
 const typographyFolder = gui.addFolder('Typography')
 typographyFolder
-    .add(typographyState, 'fontFamily', ['monospace', 'Roboto'])
+    .add(typographyState, 'fontFamily', ['Roboto', 'monospace'])
     .name('Font')
     .onChange((value : string) => {
         if (document.fonts) {

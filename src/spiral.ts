@@ -121,25 +121,37 @@ export class SpiralController {
     spiralPlane: THREE.Mesh
     private planeMaterial: THREE.MeshStandardMaterial
     private spiralMaterial: THREE.ShaderMaterial
+
     private textBuffer: TextStreamBuffer
+
     private glyphAtlas: GlyphAtlas
     private fallbackGlyph: number
+
     private total: number
     private currentFontFamily: string
+
     private particleSystem: ReturnType<typeof createPlaneParticles>
     private lensSystem: ReturnType<typeof createPlaneLenses>
+
     private displacedTArray: Float32Array
+
     private glyphUvArray: Float32Array
     private glyphAttribute: THREE.InstancedBufferAttribute
+
     private spiralGeometry: THREE.InstancedBufferGeometry
+
     private lastVisibleCount: number
     private lastVisibleStartAt: number
     private lastUniqueCount: number
+
     private needsInitialFill: boolean
+
     private spiralProgress: number = 0
+
     private blend: number = 0
     private blendTarget: number = 0
     private blendProgress: number = 0
+
     private returnDelayRemaining: number = SPIRAL_RETURN_DELAY
     private lastProgressIndex: number = 0
 
@@ -159,8 +171,8 @@ export class SpiralController {
         const textBuffer = options.textBuffer
         this.textBuffer  = textBuffer
 
-        this.lastVisibleCount   = textBuffer.visibleSlots.length
-        this.lastVisibleStartAt = textBuffer.visibleStartAt
+        this.lastVisibleCount   = textBuffer.processed.length
+        this.lastVisibleStartAt = textBuffer.startAt
         this.lastUniqueCount    = textBuffer.uniqueChars.size
 
         this.needsInitialFill = true
@@ -168,7 +180,7 @@ export class SpiralController {
         this.currentFontFamily = options.fontFamily
         const glyphAtlas       = new GlyphAtlas(this.currentFontFamily)
         this.glyphAtlas        = glyphAtlas
-        glyphAtlas.ensureChars(Array.from(textBuffer.uniqueChars))
+        glyphAtlas.ensureChars(textBuffer.uniqueChars)
         glyphAtlas.texture.anisotropy = Math.min(
             8,
             options.renderer.capabilities.getMaxAnisotropy()
@@ -419,14 +431,14 @@ export class SpiralController {
         this.rebuildSlice(0, this.total)
     }
 
-    private refreshGlyphAtlas(chars: string[]): void {
+    private refreshGlyphAtlas(chars: Iterable<string>): void {
         this.glyphAtlas.ensureChars(chars)
         this.fallbackGlyph = this.glyphAtlas.glyphMap.get(' ') ?? 0
     }
 
     private rebuildSlice(startIndex: number, count: number): void {
-        const slots     = this.textBuffer.visibleSlots as CharSlot[]
-        const startAt   = this.textBuffer.visibleStartAt
+        const slots     = this.textBuffer.processed as CharSlot[]
+        const startAt   = this.textBuffer.startAt
         const available = slots.length - startAt
         const pad       = Math.max(0, this.total - available)
 
@@ -435,6 +447,7 @@ export class SpiralController {
             let nextChar       = ' '
             let displacedIndex = slotIndex
             const bufferIndex  = slotIndex - pad
+
             if (bufferIndex >= 0 && available > 0) {
                 const source = slots[startAt + (bufferIndex % available)]
                 if (source) {
@@ -450,6 +463,7 @@ export class SpiralController {
                 }
             }
             this.displacedTArray[slotIndex]      = displacedIndex / this.total
+
             const glyphIndex                     = this.glyphAtlas.glyphMap.get(nextChar) ?? this.fallbackGlyph
             this.glyphUvArray[slotIndex * 2]     = glyphIndex % this.glyphAtlas.columns
             this.glyphUvArray[slotIndex * 2 + 1] = Math.floor(
@@ -469,15 +483,15 @@ export class SpiralController {
 
         if (this.textBuffer.uniqueChars.size !== this.lastUniqueCount) {
             this.lastUniqueCount = this.textBuffer.uniqueChars.size
-            this.refreshGlyphAtlas(Array.from(this.textBuffer.uniqueChars))
+            this.refreshGlyphAtlas(this.textBuffer.uniqueChars)
             bufferDirty = true
         }
         if (
-            this.textBuffer.visibleSlots.length !== this.lastVisibleCount ||
-            this.textBuffer.visibleStartAt !== this.lastVisibleStartAt
+            this.textBuffer.processed.length !== this.lastVisibleCount ||
+            this.textBuffer.startAt !== this.lastVisibleStartAt
         ) {
-            this.lastVisibleCount   = this.textBuffer.visibleSlots.length
-            this.lastVisibleStartAt = this.textBuffer.visibleStartAt
+            this.lastVisibleCount   = this.textBuffer.processed.length
+            this.lastVisibleStartAt = this.textBuffer.startAt
             bufferDirty             = true
         }
 
@@ -503,8 +517,8 @@ export class SpiralController {
                 this.textBuffer.shift()
                 this.rebuildSlice(slotIndex, 1)
             }
-            this.lastVisibleCount   = this.textBuffer.visibleSlots.length
-            this.lastVisibleStartAt = this.textBuffer.visibleStartAt
+            this.lastVisibleCount   = this.textBuffer.processed.length
+            this.lastVisibleStartAt = this.textBuffer.startAt
         }
 
         const duration = this.blendTarget === 1 ? SPIRAL_RETURN_DURATION : SPIRAL_RELEASE_DURATION

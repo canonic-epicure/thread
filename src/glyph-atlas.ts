@@ -67,27 +67,23 @@ export class GlyphAtlas {
         this.texture.needsUpdate = true
     }
 
-    ensureChars(chars: string[]): boolean {
+    ensureChars(chars: Iterable<string>): boolean {
         let added           = false
-        let capacityReached = false
         for (const char of chars) {
             if (this.glyphMap.has(char)) {
                 continue
             }
             const nextIndex = this.glyphsByIndex.length
             if (nextIndex >= this.columns * this.rows) {
-                capacityReached = true
-                continue
+                console.warn(
+                    `GlyphAtlas is full (${this.columns}x${this.rows}). Skipping new glyphs.`
+                )
+                break
             }
             this.glyphMap.set(char, nextIndex)
             this.glyphsByIndex[nextIndex] = char
             this.drawGlyph(char, nextIndex)
             added = true
-        }
-        if (capacityReached) {
-            console.warn(
-                `GlyphAtlas is full (${this.columns}x${this.rows}). Skipping new glyphs.`
-            )
         }
         if (added) {
             this.texture.needsUpdate = true

@@ -32,6 +32,47 @@ export type CharSlot = {
     originalDelta: number
 }
 
+export class RingBuffer<T> {
+    private buffer: T[] = []
+    private start: number = 0
+
+    constructor(size: number) {
+        if (size <= 0) {
+            throw new Error('RingBuffer size must be greater than 0')
+        }
+        this.buffer = new Array(size)
+    }
+
+    push(...items: T[]): void {
+        const length = this.buffer.length
+
+        for (let i = 0; i < items.length; i++) {
+            this.buffer[(this.start + i) % length] = items[i]
+        }
+    }
+
+    shift() {
+        const item = this.buffer[this.start]
+        this.start = (this.start + 1) % this.buffer.length
+        return item
+    }
+
+    get size(): number {
+        return this.buffer.length
+    }
+
+    get(index: number): T {
+        return this.buffer[(this.start + index) % this.buffer.length]
+    }
+
+    set(index: number, ...items: T[]) {
+        for (const item of items) {
+            this.buffer[(this.start + index) % this.buffer.length] = item
+            index++
+        }
+    }
+}
+
 export class TextStreamBuffer {
     minChunkSize: number = 500
     shuffle_radius: number = 15
@@ -40,34 +81,37 @@ export class TextStreamBuffer {
 
     uniqueChars: Set<string> = new Set([' '])
 
-    visibleSlots: CharSlot[] = []
-    visibleStartAt: number = 0
+    processed: CharSlot[] = []
+    startAt: number = 0
+
+    state: number = 0
 
 
     constructor(initialText: string) {
-        this.append(initialText)
+        this.append(initialText, true)
     }
 
     shift() {
-        this.visibleStartAt++
+        this.startAt++
+        this.state++
 
-        if (this.visibleStartAt > this.minChunkSize) {
-            this.visibleSlots   = this.visibleSlots.slice(this.visibleStartAt)
-            this.visibleStartAt = 0
+        if (this.startAt > this.minChunkSize) {
+            this.processed   = this.processed.slice(this.startAt)
+            this.startAt = 0
         }
     }
 
 
     get text(): string {
-        return this.visibleSlots.slice(this.visibleStartAt).map(char => char.char).join('')
+        return this.processed.slice(this.startAt).map(char => char.char).join('')
     }
 
     get length(): number {
-        return this.visibleSlots.length - this.visibleStartAt
+        return this.processed.length - this.startAt
     }
 
 
-    append(chunk: string): void {
+    append(chunk: string, force: boolean = false): void {
         const sanitized = sanitizeText(chunk)
         if (!sanitized) return
 
@@ -77,7 +121,7 @@ export class TextStreamBuffer {
 
         this.pending += sanitized
 
-        if (this.pending.length > this.minChunkSize) {
+        if (this.pending.length > this.minChunkSize || force) {
             const chars = Array.from(this.pending)
                 .map((char, index) => {
                     const shuffled = index + Math.floor(Math.random() * this.shuffle_radius * 2) - this.shuffle_radius
@@ -95,9 +139,10 @@ export class TextStreamBuffer {
                 slot.originalDelta = index - chars[index].index
             })
 
-            this.visibleSlots.push(...slots)
+            this.processed.push(...slots)
 
             this.pending = ''
+            this.state++
         }
     }
 }
