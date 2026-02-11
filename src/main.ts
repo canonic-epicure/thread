@@ -84,6 +84,9 @@ const MIXED_CHUNK_MIN_SIZE = 3
 const textBuffer        = new TextStreamBuffer(DEFAULT_LONG_TEXT)
 textBuffer.minChunkSize = MIXED_CHUNK_MIN_SIZE
 
+// @ts-ignore
+window.textBuffer = textBuffer
+
 const {
     sphere,
     updateSphere,

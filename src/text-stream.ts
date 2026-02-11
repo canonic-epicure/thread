@@ -28,6 +28,8 @@ const defaultConfig: TextStreamConfig = {
 }
 
 export type CharSlot = {
+    // index in the "global" text buffer (possibly after cycling through the added text and after some text was shifted out)
+    index: number
     char: string
     originalDelta: number
 }
@@ -66,9 +68,10 @@ export class RingBuffer<T> {
     }
 
     set(index: number, ...items: T[]) {
-        for (const item of items) {
-            this.buffer[(this.start + index) % this.buffer.length] = item
-            index++
+        const length = this.buffer.length
+
+        for (let i = 0; i < items.length; i++) {
+            this.buffer[(this.start + index + i) % length] = items[i]
         }
     }
 }
@@ -80,25 +83,36 @@ export class TextStreamBuffer {
     pending : string = ''
 
     uniqueChars: Set<string> = new Set([' '])
-
+    charSlots: CharSlot[] = []
     processed: CharSlot[] = []
     startAt: number = 0
 
     state: number = 0
+    slotIndex: number = 0
 
 
     constructor(initialText: string) {
         this.append(initialText, true)
     }
 
-    shift() {
-        this.startAt++
-        this.state++
+    shift(): CharSlot | null {
+        if (this.startAt < this.charSlots.length - 1) {
+            const current = this.charSlots[ this.startAt++ ]
 
-        if (this.startAt > this.minChunkSize) {
-            this.processed   = this.processed.slice(this.startAt)
-            this.startAt = 0
+            this.state++
+
+            // let removed: CharSlot[] = null
+
+            if (this.startAt > this.minChunkSize) {
+                this.processed.slice(0, this.startAt)
+                this.processed = this.processed.slice(this.startAt)
+                this.startAt = 0
+            }
+
+            return current
         }
+        else
+            return null
     }
 
 
@@ -111,8 +125,13 @@ export class TextStreamBuffer {
     }
 
 
+    sanitizeText(value: string): string {
+        return value.replace(/\s+/g, ' ').replace(/[^a-zA-Z0-9 ]/g, '').toUpperCase()
+    }
+
+
     append(chunk: string, force: boolean = false): void {
-        const sanitized = sanitizeText(chunk)
+        const sanitized = this.sanitizeText(chunk)
         if (!sanitized) return
 
         for (const char of sanitized) {
@@ -129,10 +148,10 @@ export class TextStreamBuffer {
                     return { char, index, shuffled }
                 })
 
-            chars.sort((a, b) => a.shuffled - b.shuffled)
+            // chars.sort((a, b) => a.shuffled - b.shuffled)
 
             const slots = chars.map((char) : CharSlot => {
-                return { char: char.char, originalDelta : 0 }
+                return { index: this.slotIndex++, char: char.char, originalDelta : 0 }
             })
 
             slots.forEach((slot, index) => {
@@ -267,8 +286,4 @@ export class LlmTextStream {
 
         return remaining
     }
-}
-
-function sanitizeText(value: string): string {
-    return value.replace(/\s+/g, ' ').toUpperCase()
 }
