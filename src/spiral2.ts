@@ -742,7 +742,7 @@ export class SpiralController {
                     character = sourceSlot.char
 
                     // Calculate displaced index based on original delta
-                    const fullIndex = startAt + bufferIndex - sourceSlot.originalDelta
+                    const fullIndex = startAt + bufferIndex - sourceSlot.readableDelta
                     let shuffledIndex = fullIndex - startAt
 
                     // Wrap shuffled index to valid range

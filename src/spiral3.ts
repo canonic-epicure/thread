@@ -12,20 +12,24 @@ const PLANE_HALF = PLANE_SIZE / 2
 
 const SPIRAL_TURNS = 5
 const SPIRAL_LETTER_COUNT = SPIRAL_TURNS * 51 + 15
-const LETTER_SIZE = (PLANE_SIZE * 18) / 2048
+const LETTER_SIZE = 2 * (PLANE_SIZE * 18) / 2048
 
 const SPIRAL_ALPHA_EDGE = 1.0
 const SPIRAL_ALPHA_CENTER = 1.0
 const SPIRAL_FLOW_SPEED = 0.01
 const SPIRAL_CENTER_CUTOFF_T = 0.92
 const SPIRAL_LETTER_ROTATION = -0.06
+const RETURN_DELAY = 0.6
+const RETURN_DURATION = 7
+const RELEASE_DURATION = 7
 
 // ============================================================================
 // Spiral Shader Code (static)
 // ============================================================================
 
 const SPIRAL_VERTEX_SHADER = `
-    attribute float aT;
+    attribute float aReadableT;
+    attribute float aShuffledT;
     attribute vec2 aGlyphUv;
 
     uniform float uPlaneHalf;
@@ -34,6 +38,7 @@ const SPIRAL_VERTEX_SHADER = `
     uniform float uAngleOffset;
     uniform float uSpiralProgress;
     uniform float uCenterCutoffT;
+    uniform float uBlend;
     uniform float uAlphaEdge;
     uniform float uAlphaCenter;
 
@@ -45,7 +50,9 @@ const SPIRAL_VERTEX_SHADER = `
     const float PI = 3.141592653589793;
 
     void main() {
-        float t = mod(aT + uSpiralProgress, 1.0);
+        float tOriginal = mod(aReadableT + uSpiralProgress, 1.0);
+        float tDisplaced = mod(aShuffledT + uSpiralProgress, 1.0);
+        float t = mix(tDisplaced, tOriginal, uBlend);
         if (t > uCenterCutoffT) {
             vVisible = 0.0;
             vEdgeAlpha = 0.0;
@@ -176,7 +183,7 @@ class SpiralSlotRing extends RingBuffer<CharSlot> {
     }
 
     createBlankSlot(): CharSlot {
-        return { char: ' ', originalDelta: 0, index: -1 }
+        return { char: ' ', readableDelta: 0, index: -1 }
     }
 }
 
@@ -197,10 +204,18 @@ export class SpiralController {
     private currentFontFamily: string
     private readonly totalLetterCount: number
     private glyphUvArray: Float32Array
+    private readableTArray: Float32Array
+    private shuffledTArray: Float32Array
     private glyphAttribute: THREE.InstancedBufferAttribute
+    private readableTAttribute: THREE.InstancedBufferAttribute
+    private shuffledTAttribute: THREE.InstancedBufferAttribute
     private slotRing: SpiralSlotRing
     private spiralProgress = 0
     private lastProgressIndex = 0
+    private blend = 0
+    private blendTarget = 0
+    private blendProgress = 0
+    private returnDelayRemaining = RETURN_DELAY
 
     constructor(options: SpiralControllerOptions) {
         void options.materialParams
@@ -222,6 +237,8 @@ export class SpiralController {
 
         this.totalLetterCount = options.letterCount ?? SPIRAL_LETTER_COUNT
         this.glyphUvArray = new Float32Array(this.totalLetterCount * 2)
+        this.readableTArray = new Float32Array(this.totalLetterCount)
+        this.shuffledTArray = new Float32Array(this.totalLetterCount)
         this.slotRing = new SpiralSlotRing(this.totalLetterCount, this.textBuffer)
 
         this.spiralGeometry = this.createSpiralGeometry()
@@ -256,7 +273,11 @@ export class SpiralController {
         delta: number,
         sphereState: { isPointerDown: boolean; scrollSpeed: number }
     ): void {
-        void sphereState
+        // if (this.detectBufferChanges()) {
+        //     this.handleBufferChanges()
+        // }
+
+        this.updateBlendState(delta, sphereState.isPointerDown)
 
         this.spiralProgress = (this.spiralProgress + SPIRAL_FLOW_SPEED * delta) % 1
         const progressIndex = Math.floor(this.spiralProgress * this.totalLetterCount)
@@ -268,17 +289,12 @@ export class SpiralController {
                 const slotIndex = (this.totalLetterCount - this.lastProgressIndex) % this.totalLetterCount
 
                 const slot = this.textBuffer.shift()
-
-                if (slot) {
-                    this.slotRing.advance(1, slot)
-                    this.updateLetterAt(slotIndex, slot)
-                } else {
-                    this.slotRing.advance(1)
-                    this.updateLetterAt(slotIndex, this.slotRing.createBlankSlot())
-                }
+                this.slotRing.advance(1, slot)
+                this.updateLetterAt(slotIndex, slot, step)
             }
         }
         this.spiralMaterial.uniforms.uSpiralProgress.value = this.spiralProgress
+        this.spiralMaterial.uniforms.uBlend.value = this.blend
     }
 
     private createSpiralGeometry(): THREE.InstancedBufferGeometry {
@@ -289,11 +305,18 @@ export class SpiralController {
         geometry.attributes.uv = baseQuad.attributes.uv
         geometry.instanceCount = this.totalLetterCount
 
-        const tArray = new Float32Array(this.totalLetterCount)
         for (let i = 0; i < this.totalLetterCount; i++) {
-            tArray[i] = i / this.totalLetterCount
+            const t = i / this.totalLetterCount
+            this.readableTArray[i] = t
+            this.shuffledTArray[i] = t
         }
-        geometry.setAttribute('aT', new THREE.InstancedBufferAttribute(tArray, 1))
+        const readableAttribute = new THREE.InstancedBufferAttribute(this.readableTArray, 1)
+        const shuffledAttribute = new THREE.InstancedBufferAttribute(this.shuffledTArray, 1)
+        shuffledAttribute.setUsage(THREE.DynamicDrawUsage)
+        geometry.setAttribute('aReadableT', readableAttribute)
+        geometry.setAttribute('aShuffledT', shuffledAttribute)
+        this.readableTAttribute = readableAttribute
+        this.shuffledTAttribute = shuffledAttribute
 
         const glyphAttribute = new THREE.InstancedBufferAttribute(this.glyphUvArray, 2)
         glyphAttribute.setUsage(THREE.DynamicDrawUsage)
@@ -316,6 +339,7 @@ export class SpiralController {
                 uAngleOffset: { value: 0 },
                 uSpiralProgress: { value: 0 },
                 uCenterCutoffT: { value: SPIRAL_CENTER_CUTOFF_T },
+                uBlend: { value: 0 },
                 uAtlas: { value: this.glyphAtlas.texture },
                 uAtlasGrid: { value: new THREE.Vector2(this.glyphAtlas.columns, this.glyphAtlas.rows) },
                 uLetterColor: { value: new THREE.Color(options.letterColor) },
@@ -332,14 +356,9 @@ export class SpiralController {
     }
 
     private handleBufferChanges(): void {
-        if (this.textBuffer.state !== this.lastTextBufferState) {
-            this.lastTextBufferState = this.textBuffer.state
-            this.glyphAtlas.ensureChars(this.textBuffer.uniqueChars)
-            this.fallbackGlyph = this.glyphAtlas.glyphMap.get(' ') ?? 0
-        }
-
-        this.slotRing.syncFromTextBuffer(this.textBuffer)
-        this.updateAllLetters()
+        this.lastTextBufferState = this.textBuffer.state
+        this.glyphAtlas.ensureChars(this.textBuffer.uniqueChars)
+        this.fallbackGlyph = this.glyphAtlas.glyphMap.get(' ') ?? 0
     }
 
     private updateAllLetters(): void {
@@ -348,20 +367,56 @@ export class SpiralController {
             const sourceSlot = this.slotRing.get(ringIndex)
             const character = sourceSlot?.char ?? ' '
             this.writeGlyph(slotIndex, character)
+            this.writeReadableT(slotIndex, sourceSlot, 0)
         }
 
         this.glyphAttribute.needsUpdate = true
+        this.shuffledTAttribute.needsUpdate = true
     }
 
-    private updateLetterAt(slotIndex: number, slot: CharSlot): void {
+    private updateLetterAt(slotIndex: number, slot: CharSlot, step: number): void {
         const character = slot?.char ?? ' '
         this.writeGlyph(slotIndex, character)
         this.glyphAttribute.needsUpdate = true
+        this.writeReadableT(slotIndex, slot, step)
+        this.shuffledTAttribute.needsUpdate = true
     }
 
     private writeGlyph(slotIndex: number, character: string): void {
         const glyphIndex = this.glyphAtlas.glyphMap.get(character) ?? this.fallbackGlyph
         this.glyphUvArray[slotIndex * 2] = glyphIndex % this.glyphAtlas.columns
         this.glyphUvArray[slotIndex * 2 + 1] = Math.floor(glyphIndex / this.glyphAtlas.columns)
+    }
+
+    private writeReadableT(slotIndex: number, slot: CharSlot, step: number): void {
+        let readableIndex = slotIndex + slot.readableDelta + step
+
+        if (readableIndex < 0 || readableIndex >= this.totalLetterCount) {
+            readableIndex = slotIndex
+        }
+
+        this.readableTArray[slotIndex] = (readableIndex + step) / this.totalLetterCount
+    }
+
+    private updateBlendState(delta: number, isPointerDown: boolean): void {
+        if (isPointerDown) {
+            this.returnDelayRemaining = Math.max(0, this.returnDelayRemaining - delta)
+            this.blendTarget = this.returnDelayRemaining === 0 ? 1 : 0
+        } else {
+            this.returnDelayRemaining = RETURN_DELAY
+            this.blendTarget = 0
+        }
+
+        const duration = this.blendTarget === 1 ? RETURN_DURATION : RELEASE_DURATION
+        const step = duration > 0 ? delta / duration : 1
+
+        if (this.blendTarget === 1) {
+            this.blendProgress = Math.min(1, this.blendProgress + step)
+        } else {
+            this.blendProgress = Math.max(0, this.blendProgress - step)
+        }
+
+        const t = this.blendProgress
+        this.blend = t * t * (3 - 2 * t)
     }
 }

@@ -452,7 +452,7 @@ export class SpiralController {
                 const source = slots[startAt + (bufferIndex % available)]
                 if (source) {
                     nextChar          = source.char
-                    const fullIndex   = startAt + bufferIndex - source.originalDelta
+                    const fullIndex   = startAt + bufferIndex - source.readableDelta
                     let shuffledIndex = fullIndex - startAt
                     if (shuffledIndex < 0) {
                         shuffledIndex = (shuffledIndex % available + available) % available

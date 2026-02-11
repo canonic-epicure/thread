@@ -31,7 +31,7 @@ export type CharSlot = {
     // index in the "global" text buffer (possibly after cycling through the added text and after some text was shifted out)
     index: number
     char: string
-    originalDelta: number
+    readableDelta: number
 }
 
 export class RingBuffer<T> {
@@ -162,14 +162,14 @@ export class TextStreamBuffer {
                     return { char, index, shuffled }
                 })
 
-            // chars.sort((a, b) => a.shuffled - b.shuffled)
+            chars.sort((a, b) => a.shuffled - b.shuffled)
 
             const slots = chars.map((char) : CharSlot => {
-                return { index: this.slotIndex++, char: char.char, originalDelta : 0 }
+                return { index: this.slotIndex++, char: char.char, readableDelta : 0 }
             })
 
             slots.forEach((slot, index) => {
-                slot.originalDelta = index - chars[index].index
+                slot.readableDelta = index - chars[index].index
             })
 
             this.processed.push(...slots)
