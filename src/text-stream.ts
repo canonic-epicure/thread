@@ -94,6 +94,21 @@ export class TextStreamBuffer {
         this.append(initialText, true)
     }
 
+    advance(available: number) {
+        if (this.startAt < this.processed.length) {
+            this.startAt += available
+
+            this.state++
+
+            if (this.startAt > this.minChunkSize) {
+                this.processed.slice(0, this.startAt)
+                this.processed = this.processed.slice(this.startAt)
+                this.startAt = 0
+            }
+        }
+    }
+
+
     shift(): CharSlot | null {
         if (this.startAt < this.processed.length - 1) {
             const current = this.processed[ this.startAt++ ]

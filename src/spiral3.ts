@@ -171,6 +171,8 @@ class SpiralSlotRing extends RingBuffer<CharSlot> {
         }
 
         this.set(0, ...fill)
+
+        this.textBuffer.advance(Math.min(available, this.size))
     }
 
     createBlankSlot(): CharSlot {
