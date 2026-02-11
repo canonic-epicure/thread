@@ -255,9 +255,6 @@ export class SpiralController {
         sphereState: { isPointerDown: boolean; scrollSpeed: number }
     ): void {
         void sphereState
-        if (this.detectBufferChanges()) {
-            this.handleBufferChanges()
-        }
 
         this.spiralProgress = (this.spiralProgress + SPIRAL_FLOW_SPEED * delta) % 1
         const progressIndex = Math.floor(this.spiralProgress * this.totalLetterCount)
@@ -269,6 +266,7 @@ export class SpiralController {
                 const slotIndex = (this.totalLetterCount - this.lastProgressIndex) % this.totalLetterCount
 
                 const slot = this.textBuffer.shift()
+
                 if (slot) {
                     this.slotRing.advance(1, slot)
                     this.updateLetterAt(slotIndex, slot)

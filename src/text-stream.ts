@@ -83,7 +83,6 @@ export class TextStreamBuffer {
     pending : string = ''
 
     uniqueChars: Set<string> = new Set([' '])
-    charSlots: CharSlot[] = []
     processed: CharSlot[] = []
     startAt: number = 0
 
@@ -96,8 +95,8 @@ export class TextStreamBuffer {
     }
 
     shift(): CharSlot | null {
-        if (this.startAt < this.charSlots.length - 1) {
-            const current = this.charSlots[ this.startAt++ ]
+        if (this.startAt < this.processed.length - 1) {
+            const current = this.processed[ this.startAt++ ]
 
             this.state++
 
