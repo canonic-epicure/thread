@@ -392,10 +392,10 @@ export class SpiralController {
         let readableIndex = slotIndex + slot.readableDelta + step
 
         if (readableIndex < 0 || readableIndex >= this.totalLetterCount) {
-            readableIndex = slotIndex
+            readableIndex = slotIndex + step
         }
 
-        this.readableTArray[slotIndex] = (readableIndex + step) / this.totalLetterCount
+        this.readableTArray[slotIndex] = readableIndex / this.totalLetterCount
     }
 
     private updateBlendState(delta: number, isPointerDown: boolean): void {
