@@ -52,7 +52,13 @@ const SPIRAL_VERTEX_SHADER = `
     void main() {
         float tOriginal = mod(aReadableT + uSpiralProgress, 1.0);
         float tDisplaced = mod(aShuffledT + uSpiralProgress, 1.0);
-        float t = mix(tDisplaced, tOriginal, uBlend);
+        float delta = tOriginal - tDisplaced;
+        if (delta > 0.5) {
+            delta -= 1.0;
+        } else if (delta < -0.5) {
+            delta += 1.0;
+        }
+        float t = mod(tDisplaced + delta * uBlend + 1.0, 1.0);
         if (t > uCenterCutoffT) {
             vVisible = 0.0;
             vEdgeAlpha = 0.0;
