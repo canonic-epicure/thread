@@ -8,8 +8,9 @@ import { SpiralController } from './spiral3.js'
 import { SpiralController as SpiralController2 } from './spiral3.js'
 import { initSoundCloud } from './sound.js'
 import { createNoiseShader } from './noise'
+import { TextStreamBuffer } from "./text-stream-buffer.js"
 import { DEFAULT_LONG_TEXT } from './text.js'
-import { LlmTextStream, TextStreamBuffer } from './text-stream.js'
+import { LlmTextStream } from './text-stream.js'
 import './style.css'
 
 const app = document.querySelector<HTMLDivElement>('#app')
@@ -138,7 +139,7 @@ composer.addPass(new RenderPass(scene, camera))
 const noisePass = new ShaderPass(createNoiseShader(0.061125, 2.8, 0.12))
 composer.addPass(noisePass)
 
-const gui         = new GUI({ title: 'Inspector' })
+const gui         = new GUI({ title: 'Configuration' })
 const colorFolder = gui.addFolder('Colors')
 colorFolder
     .addColor(colorState, 'background')

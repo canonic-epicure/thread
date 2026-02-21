@@ -1,5 +1,5 @@
 import * as THREE from 'three'
-import type { CharSlot, TextStreamBuffer } from './text-stream.js'
+import { type CharSlot, TextStreamBuffer } from "./text-stream-buffer.js"
 import { GlyphAtlas } from './glyph-atlas.js'
 import { createPlaneParticles } from './plane-particles.js'
 import {
