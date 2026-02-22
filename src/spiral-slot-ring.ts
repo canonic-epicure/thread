@@ -11,11 +11,9 @@ export class SpiralSlotRing extends RingBuffer<CharSlot> {
         this.syncFromTextBuffer(textBuffer)
     }
 
-    advance(steps : number, slot : CharSlot = null) : void {
-        for (let step = 0; step < steps; step++) {
-            this.shift()
-            this.set(this.size - 1, slot ?? this.createBlankSlot())
-        }
+    advance(slot : CharSlot) : void {
+        this.shift()
+        this.set(this.size - 1, slot ?? this.createBlankSlot())
     }
 
     syncFromTextBuffer(textBuffer : TextStreamBuffer) : void {

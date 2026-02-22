@@ -27,6 +27,10 @@ export class RingBuffer<T> {
         return this.buffer.length
     }
 
+    get buffer_line() : T[] {
+        return this.buffer.slice(this.start).concat(this.buffer.slice(0, this.start))
+    }
+
     get(index : number) : T {
         return this.buffer[ (this.start + index) % this.buffer.length ]
     }

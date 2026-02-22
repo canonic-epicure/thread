@@ -13,6 +13,10 @@ import { DEFAULT_LONG_TEXT } from './text.js'
 import { LlmTextStream } from './text-stream.js'
 import './style.css'
 
+export const SPIRAL_TURNS = 2 // 5
+export const SPIRAL_LETTER_COUNT = 50 //SPIRAL_TURNS * 51 + 15
+
+
 const app = document.querySelector<HTMLDivElement>('#app')
 if (!app) {
     throw new Error('Missing #app element')
@@ -80,7 +84,7 @@ const baseMaterialParams = {
     metalness: sharedSurface.metalness
 }
 
-const textBuffer        = new TextStreamBuffer(DEFAULT_LONG_TEXT)
+const textBuffer = new TextStreamBuffer(DEFAULT_LONG_TEXT, SPIRAL_LETTER_COUNT)
 
 // @ts-ignore
 window.textBuffer = textBuffer
@@ -112,9 +116,14 @@ const spiralController = new SpiralController2({
     planeColor: Number.parseInt(colorState.spiralPlane.replace('#', ''), 16),
     letterColor: Number.parseInt(colorState.spiralLetters.replace('#', ''), 16),
     fontFamily: typographyState.fontFamily,
-    textBuffer
+    textBuffer,
+    SPIRAL_TURNS,
+    SPIRAL_LETTER_COUNT
 })
 scene.add(spiralController.spiralPlane)
+
+// @ts-ignore
+window.spiralController = spiralController
 
 const textStream = new LlmTextStream(
     textBuffer,

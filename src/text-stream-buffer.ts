@@ -5,7 +5,7 @@ export type CharSlot = {
 }
 
 export class TextStreamBuffer {
-    minChunkSize : number = 500
+    chunkSize : number = 0
     shuffle_radius : number = 15
 
     pending : string = ''
@@ -17,7 +17,8 @@ export class TextStreamBuffer {
     state : number = 0
 
 
-    constructor(initialText : string) {
+    constructor(initialText : string, chunkSize : number = 500) {
+        this.chunkSize = chunkSize
         this.append(initialText, true)
     }
 
@@ -27,7 +28,7 @@ export class TextStreamBuffer {
 
             this.state++
 
-            if (this.startAt > this.minChunkSize) {
+            if (this.startAt > this.chunkSize) {
                 this.processed.slice(0, this.startAt)
                 this.processed = this.processed.slice(this.startAt)
                 this.startAt   = 0
@@ -42,7 +43,7 @@ export class TextStreamBuffer {
 
             this.state++
 
-            if (this.startAt > this.minChunkSize) {
+            if (this.startAt > this.chunkSize) {
                 this.processed.slice(0, this.startAt)
                 this.processed = this.processed.slice(this.startAt)
                 this.startAt   = 0
@@ -78,29 +79,36 @@ export class TextStreamBuffer {
 
         this.pending += sanitized
 
-        if (this.pending.length > this.minChunkSize || force) {
-            const chars = Array.from(this.pending)
-                .map((char, index) => {
-                    const shuffled = index + Math.floor(Math.random() * this.shuffle_radius * 2) - this.shuffle_radius
+        if (this.pending.length >= this.chunkSize || force) {
+            const chunks = Math.floor(this.pending.length / this.chunkSize)
 
-                    return { char, index, shuffled }
+            for (let i = 0; i < chunks; i++) {
+                const chunk = this.pending.slice(i * this.chunkSize, (i + 1) * this.chunkSize)
+
+                const chars = Array.from(chunk)
+                    .map((char, index) => {
+                        const shuffled = index + Math.floor(Math.random() * this.shuffle_radius * 2)
+                            - this.shuffle_radius
+
+                        return { char, index, shuffled }
+                    })
+
+                chars.sort((a, b) => a.shuffled - b.shuffled)
+
+                const slots = chars.map((char) : CharSlot => {
+                    return { index: char.index, char: char.char, readableDelta: 0 }
                 })
 
-            chars.sort((a, b) => a.shuffled - b.shuffled)
+                slots.forEach((slot, index) => {
+                    slot.readableDelta = index - chars[ index ].index
+                })
 
-            const slots = chars.map((char) : CharSlot => {
-                return { index: char.index, char: char.char, readableDelta: 0 }
-            })
+                slots.sort((a, b) => a.index - b.index)
 
-            slots.forEach((slot, index) => {
-                slot.readableDelta = index - chars[ index ].index
-            })
+                this.processed.push(...slots)
+            }
 
-            slots.sort((a, b) => a.index - b.index)
-
-            this.processed.push(...slots)
-
-            this.pending = ''
+            this.pending = this.pending.slice(chunks * this.chunkSize)
             this.state++
         }
     }

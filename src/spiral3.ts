@@ -1,5 +1,6 @@
 import * as THREE from 'three'
 import { GlyphAtlas } from './glyph-atlas.js'
+import { createSpiralFragmentShader, createSpiralVertexShader } from './spiral3-shaders.js'
 import { SpiralSlotRing } from "./spiral-slot-ring.js"
 import { type CharSlot, TextStreamBuffer } from "./text-stream-buffer.js"
 
@@ -10,13 +11,12 @@ import { type CharSlot, TextStreamBuffer } from "./text-stream-buffer.js"
 const PLANE_SIZE = 5
 const PLANE_HALF = PLANE_SIZE / 2
 
-const SPIRAL_TURNS        = 5
-const SPIRAL_LETTER_COUNT = SPIRAL_TURNS * 51 + 15
-const LETTER_SIZE         = 2 * (PLANE_SIZE * 18) / 2048
+const LETTER_SIZE = 2 * (PLANE_SIZE * 18) / 2048
 
 const SPIRAL_ALPHA_EDGE            = 1.0
 const SPIRAL_ALPHA_CENTER          = 1.0
-const SPIRAL_FLOW_SPEED            = 0.002
+const SPIRAL_FLOW_SPEED            = 0.01
+const SPIRAL_VISIBLE_START_T       = 0.5
 const SPIRAL_CENTER_CUTOFF_T       = 0.92
 const SPIRAL_LETTER_ROTATION       = -0.06
 const SPIRAL_READABLE_RADIUS_SCALE = 0.92
@@ -27,110 +27,6 @@ const RELEASE_DURATION             = 3
 // ============================================================================
 // Spiral Shader Code (static)
 // ============================================================================
-
-const SPIRAL_VERTEX_SHADER = `
-    attribute float aReadableT;
-    attribute float aReadableDelta;
-    attribute vec2 aGlyphUv;
-
-    uniform float uPlaneHalf;
-    uniform float uSpiralTurns;
-    uniform float uLetterSize;
-    uniform float uAngleOffset;
-    uniform float uSpiralProgress;
-    uniform float uCenterCutoffT;
-    uniform float uBlend;
-    uniform float uLetterCountInv;
-    uniform float uRadiusScale;
-    uniform float uAlphaEdge;
-    uniform float uAlphaCenter;
-
-    varying vec2 vUv;
-    varying vec2 vGlyphUv;
-    varying float vEdgeAlpha;
-    varying float vVisible;
-
-    const float PI = 3.141592653589793;
-
-    void main() {
-        float readableRaw = aReadableT + uSpiralProgress;
-        float tOriginal = mod(readableRaw, 1.0);
-        float tDisplaced = mod(aReadableT + aReadableDelta * uLetterCountInv + uSpiralProgress, 1.0);
-        float t;
-        if (readableRaw < 0.0 || readableRaw > 1.0) {
-            t = tDisplaced;
-        } else {
-            float delta = tOriginal - tDisplaced;
-            if (delta > 0.5) {
-                delta -= 1.0;
-            } else if (delta < -0.5) {
-                delta += 1.0;
-            }
-            t = mod(tDisplaced + delta * uBlend + 1.0, 1.0);
-        }
-        if (t > uCenterCutoffT) {
-            vVisible = 0.0;
-            vEdgeAlpha = 0.0;
-            vUv = uv;
-            vGlyphUv = aGlyphUv;
-            gl_Position = projectionMatrix * modelViewMatrix * vec4(0.0, 0.0, 10000.0, 1.0);
-            return;
-        }
-
-        vVisible = 1.0;
-        float radius = (uPlaneHalf - t * uPlaneHalf) * uRadiusScale;
-        float angle = -uSpiralTurns * 2.0 * PI * t + uAngleOffset;
-        vec2 pos = vec2(cos(angle), sin(angle)) * radius;
-
-        vec2 quad = position.xy * uLetterSize;
-        float orient = angle + PI + ${SPIRAL_LETTER_ROTATION.toFixed(1)};
-        vec2 up = vec2(cos(orient), sin(orient));
-        vec2 right = vec2(up.y, -up.x);
-        vec2 offset = right * quad.x + up * quad.y;
-
-        vec3 finalPos = vec3(pos + offset, 0.01);
-
-        float edgeT = clamp(length(pos) / uPlaneHalf, 0.0, 1.0);
-        vEdgeAlpha = mix(uAlphaCenter, uAlphaEdge, edgeT);
-
-        vUv = uv;
-        vGlyphUv = aGlyphUv;
-        gl_Position = projectionMatrix * modelViewMatrix * vec4(finalPos, 1.0);
-    }
-`
-
-const SPIRAL_FRAGMENT_SHADER = `
-    uniform sampler2D uAtlas;
-    uniform vec2 uAtlasGrid;
-    uniform vec3 uLetterColor;
-
-    varying vec2 vUv;
-    varying vec2 vGlyphUv;
-    varying float vEdgeAlpha;
-    varying float vVisible;
-
-    void main() {
-        if (vVisible < 0.5) {
-            discard;
-        }
-
-        float flippedRow = (uAtlasGrid.y - 1.0) - vGlyphUv.y;
-        vec2 atlasUv = vec2(
-            (vGlyphUv.x + vUv.x) / uAtlasGrid.x,
-            (flippedRow + vUv.y) / uAtlasGrid.y
-        );
-
-        vec4 glyphSample = texture2D(uAtlas, atlasUv);
-        float glyphAlpha = max(glyphSample.a, glyphSample.r);
-        float alpha = glyphAlpha * vEdgeAlpha;
-
-        if (alpha < 0.01) {
-            discard;
-        }
-
-        gl_FragColor = vec4(uLetterColor, alpha);
-    }
-`
 
 // ============================================================================
 // Type Definitions
@@ -148,6 +44,8 @@ type SpiralControllerOptions = {
     fontFamily: string
     textBuffer: TextStreamBuffer
     letterCount?: number
+    SPIRAL_TURNS: number
+    SPIRAL_LETTER_COUNT: number
 }
 
 // ============================================================================
@@ -155,6 +53,9 @@ type SpiralControllerOptions = {
 // ============================================================================
 
 export class SpiralController {
+    SPIRAL_TURNS: number = 5
+    SPIRAL_LETTER_COUNT: number = this.SPIRAL_TURNS * 51 + 15
+
     spiralPlane: THREE.Object3D
 
     private spiralMaterial: THREE.ShaderMaterial
@@ -187,6 +88,9 @@ export class SpiralController {
 
         this.spiralPlane = new THREE.Group()
 
+        this.SPIRAL_TURNS        = options.SPIRAL_TURNS
+        this.SPIRAL_LETTER_COUNT = options.SPIRAL_LETTER_COUNT
+
         this.textBuffer          = options.textBuffer
         this.lastTextBufferState = this.textBuffer.state
 
@@ -199,7 +103,7 @@ export class SpiralController {
         )
         this.fallbackGlyph                 = this.glyphAtlas.glyphMap.get(' ') ?? 0
 
-        this.totalLetterCount   = options.letterCount ?? SPIRAL_LETTER_COUNT
+        this.totalLetterCount   = options.letterCount ?? this.SPIRAL_LETTER_COUNT
         this.glyphUvArray       = new Float32Array(this.totalLetterCount * 2)
         this.readableTArray     = new Float32Array(this.totalLetterCount)
         this.readableDeltaArray = new Float32Array(this.totalLetterCount)
@@ -209,7 +113,7 @@ export class SpiralController {
         this.spiralMaterial                               = this.createSpiralMaterial(options)
         this.readableMaterial                             = this.createSpiralMaterial(options)
         this.readableMaterial.uniforms.uBlend.value       = 1
-        this.readableMaterial.uniforms.uRadiusScale.value = 0//SPIRAL_READABLE_RADIUS_SCALE
+        this.readableMaterial.uniforms.uRadiusScale.value = 0 // SPIRAL_READABLE_RADIUS_SCALE
 
         const spiralOverlay         = new THREE.Mesh(this.spiralGeometry, this.spiralMaterial)
         spiralOverlay.renderOrder   = 2
@@ -262,7 +166,7 @@ export class SpiralController {
                 const slotIndex        = (this.totalLetterCount - this.lastProgressIndex) % this.totalLetterCount
 
                 const slot = this.textBuffer.shift()
-                this.slotRing.advance(1, slot)
+                this.slotRing.advance(slot)
                 this.updateLetterAt(slotIndex, slot)
             }
         }
@@ -308,22 +212,23 @@ export class SpiralController {
             side: THREE.DoubleSide,
             uniforms: {
                 uPlaneHalf: { value: PLANE_HALF },
-                uSpiralTurns: { value: SPIRAL_TURNS },
+                uSpiralTurns: { value: this.SPIRAL_TURNS },
                 uLetterSize: { value: LETTER_SIZE },
                 uAngleOffset: { value: 0 },
                 uSpiralProgress: { value: 0 },
                 uCenterCutoffT: { value: SPIRAL_CENTER_CUTOFF_T },
+                uVisibleStartT: { value: SPIRAL_VISIBLE_START_T },
                 uBlend: { value: 0 },
                 uRadiusScale: { value: 1 },
-                uLetterCountInv: { value: 1 / this.totalLetterCount },
+                uLetterCount: { value: this.totalLetterCount },
                 uAtlas: { value: this.glyphAtlas.texture },
                 uAtlasGrid: { value: new THREE.Vector2(this.glyphAtlas.columns, this.glyphAtlas.rows) },
                 uLetterColor: { value: new THREE.Color(options.letterColor) },
                 uAlphaEdge: { value: SPIRAL_ALPHA_EDGE },
                 uAlphaCenter: { value: SPIRAL_ALPHA_CENTER }
             },
-            vertexShader: SPIRAL_VERTEX_SHADER,
-            fragmentShader: SPIRAL_FRAGMENT_SHADER
+            vertexShader: createSpiralVertexShader({ letterRotation: SPIRAL_LETTER_ROTATION }),
+            fragmentShader: createSpiralFragmentShader()
         })
     }
 
@@ -355,9 +260,9 @@ export class SpiralController {
     private updateLetterAt(slotIndex: number, slot: CharSlot): void {
         const character = slot?.char ?? ' '
         this.writeGlyph(slotIndex, character)
-        this.glyphAttribute.needsUpdate = true
-        this.writeReadableT(slotIndex, slot)
-        this.writeReadableDelta(slotIndex, slot)
+        this.glyphAttribute.needsUpdate         = true
+        this.readableTArray[slotIndex]          = slotIndex / this.totalLetterCount
+        this.readableDeltaArray[slotIndex]      = slot.readableDelta
         this.readableTAttribute.needsUpdate     = true
         this.readableDeltaAttribute.needsUpdate = true
     }
@@ -375,6 +280,29 @@ export class SpiralController {
 
     private writeReadableDelta(slotIndex: number, slot: CharSlot): void {
         this.readableDeltaArray[slotIndex] = slot.readableDelta
+    }
+
+    getDisplacedTValues(): number[] {
+        const result = new Array(this.totalLetterCount)
+        for (let i = 0; i < this.totalLetterCount; i++) {
+            const t   = (this.readableTArray[i] * this.totalLetterCount + this.readableDeltaArray[i])
+                / this.totalLetterCount + this.spiralProgress
+            result[i] = this.wrap01(t)
+        }
+        return result
+    }
+
+    getReadableTValues(): number[] {
+        const result = new Array(this.totalLetterCount)
+        for (let i = 0; i < this.totalLetterCount; i++) {
+            const t   = this.readableTArray[i] + this.spiralProgress
+            result[i] = this.wrap01(t)
+        }
+        return result
+    }
+
+    private wrap01(value: number): number {
+        return ((value % 1) + 1) % 1
     }
 
     private updateBlendState(delta: number, isPointerDown: boolean): void {
